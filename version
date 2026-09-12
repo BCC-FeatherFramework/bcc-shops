@@ -1,0 +1,15 @@
+<1.2.3>
+- Removed unnecessary `lower()` usage.
+- Fixed incorrect category label.
+- Enforced category selection when adding items  
+  - No more “unknown” category.  
+  - Only admins can create new categories.
+- Removed `create shop` method in favor of inline syntax.
+- Disabled NPC spawns (temporary)  
+  - They were buggy and conflicted with engine-generated NPCs.
+- Removed server-side NPC auto-purchase loop  
+  - This loop periodically simulated NPCs buying from player-owned shops.
+
+<1.2.2>
+- fix(sell): move sold items into shop stock
+- update readme

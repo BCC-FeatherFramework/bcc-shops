@@ -1,0 +1,164 @@
+-- Server-side NPC auto-purchase loop
+-- Runs periodically and simulates NPCs buying from player-owned shops.
+
+local function getAllPlayerShops()
+    if type(FetchAllPlayerShops) == "function" then
+        return FetchAllPlayerShops() or {}
+    end
+    local result = MySQL.query.await('SELECT shop_id, shop_name, pos_x, pos_y, pos_z FROM bcc_shops WHERE owner_id IS NOT NULL', {})
+    return result or {}
+end
+
+local function pickRandom(list)
+    if not list or #list == 0 then return nil end
+    return list[math.random(1, #list)]
+end
+
+local function fetchAvailableStock(shopId)
+    local items = {}
+
+    local itemRows = MySQL.query.await([[ 
+        SELECT item_name AS name, item_label AS label, buy_price, buy_quantity 
+        FROM bcc_shop_items 
+        WHERE shop_id = ? AND buy_quantity > 0
+    ]], { shopId }) or {}
+
+    for _, row in ipairs(itemRows) do
+        table.insert(items, {
+            is_weapon   = false,
+            name        = row.name,
+            label       = row.label or row.name,
+            buy_price   = tonumber(row.buy_price) or 0,
+            buy_quantity= tonumber(row.buy_quantity) or 0,
+        })
+    end
+
+    local weaponRows = MySQL.query.await([[ 
+        SELECT weapon_name AS name, weapon_label AS label, buy_price, buy_quantity 
+        FROM bcc_shop_weapon_items 
+        WHERE shop_id = ? AND buy_quantity > 0
+    ]], { shopId }) or {}
+
+    for _, row in ipairs(weaponRows) do
+        table.insert(items, {
+            is_weapon   = true,
+            name        = row.name,
+            label       = row.label or row.name,
+            buy_price   = tonumber(row.buy_price) or 0,
+            buy_quantity= tonumber(row.buy_quantity) or 0,
+        })
+    end
+
+    return items
+end
+
+local function sendWebhook(shopId, shopName, label, name, qty, total, isWeapon)
+    local shopInfo = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local info = (shopInfo and shopInfo[1]) or {}
+    local webhook = info.webhook_link -- may be nil
+    local finalName = info.shop_name or shopName or "Unknown"
+
+    local title = isWeapon and "🛒 Weapon Purchased" or "Item Purchased"
+    local embed = { 
+        {
+            color = 3145631,
+            title = title,
+            description = table.concat({
+                "**Character Name:** `NPC`",
+                "**Character ID:** `NPC`",
+                (isWeapon and "**Weapon Name:** `" .. label .. "`" or "**Item Name:** `" .. label .. "`"),
+                (isWeapon and "**Weapon ID:** `" .. name .. "`" or "**Item ID:** `" .. name .. "`"),
+                "**Quantity:** `" .. tostring(qty) .. "`",
+                "**Total Cost:** `$" .. tostring(total) .. "`",
+                "**Shop Name:** `" .. finalName .. "`"
+            }, "\n")
+        }
+    }
+
+    if webhook and webhook ~= "none" then
+        ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
+    end
+    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
+end
+
+local function performNpcPurchase(shopId, shopName, item)
+    local maxAvailable = tonumber(item.buy_quantity or 0)
+    if maxAvailable <= 0 then return false end
+
+    local pool = {1, 1, 1, 2, 2, 3, 3, 4, 5}
+    local desired = pool[math.random(1, #pool)]
+    local qty = math.min(desired, maxAvailable)
+    local price = tonumber(item.buy_price or 0)
+    local total = price * qty
+
+    if qty <= 0 or total <= 0 then return false end
+
+    if item.is_weapon then
+        MySQL.update.await(
+            'UPDATE bcc_shop_weapon_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
+            { qty, shopId, item.name }
+        )
+    else
+        MySQL.update.await(
+            'UPDATE bcc_shop_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND item_name = ?',
+            { qty, shopId, item.name }
+        )
+    end
+
+    MySQL.update.await('UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?', { total, shopId })
+
+    sendWebhook(shopId, shopName, item.label, item.name, qty, total, item.is_weapon)
+    return true
+end
+
+CreateThread(function()
+    -- small delay to let other services init
+    Wait(2500)
+    devPrint("[NPC AutoBuy] Server loop initializing...")
+
+    while true do
+        local interval = (Config and Config.NPC and tonumber(Config.NPC.purchaseInterval)) or 900000
+
+        if not (Config and Config.NPC and Config.NPC.npcBuyFromPlayerShop) then
+            -- loop disabled, check again in one minute
+            Wait(60000)
+        else
+            local shops = getAllPlayerShops()
+            if not shops or #shops == 0 then
+                devPrint("[NPC AutoBuy] No player shops found. Skipping.")
+                Wait(60000)
+            else
+                local shop = pickRandom(shops)
+                local shopName = shop.shop_name
+                local shopId = shop.shop_id or MySQL.scalar.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL', { shopName })
+
+                if not shopId then
+                    devPrint("[NPC AutoBuy] Could not resolve shop_id for " .. tostring(shopName))
+                    Wait(interval)
+                else
+                    local stock = fetchAvailableStock(shopId)
+                    if not stock or #stock == 0 then
+                        devPrint("[NPC AutoBuy] No available stock for shop: " .. tostring(shopName))
+                        Wait(interval)
+                    else
+                        local item = pickRandom(stock)
+                        devPrint(string.format("[NPC AutoBuy] Purchasing %s '%s' x%d from '%s' for $%d",
+                            item.is_weapon and "weapon" or "item",
+                            item.label,
+                            math.min(item.buy_quantity, 1), -- log preview, actual qty decided inside perform
+                            shopName,
+                            (tonumber(item.buy_price) or 0)
+                        ))
+
+                        local ok = performNpcPurchase(shopId, shopName, item)
+                        if not ok then
+                            devPrint("[NPC AutoBuy] Purchase skipped due to invalid data.")
+                        end
+                        Wait(interval)
+                    end
+                end
+            end
+        end
+    end
+end)
+
