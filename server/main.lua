@@ -1,11 +1,12 @@
-VORPcore = exports.vorp_core:GetCore()
-BccUtils = exports['bcc-utils'].initiate()
-discord = BccUtils.Discord.setup(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar)
 
 
-BccUtils.RPC:Register("bcc-shops:GetPlayerLevel", function(_, cb, src)
-    local user = VORPcore.getUser(src)
-    local character = user and user.getUsedCharacter
+discord = ShopsToolkit.Discord.setup(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar)
+
+
+exports['feather-core']:RegisterRPC("bcc-shops:GetPlayerLevel", function(_, cb, src)
+    local _U = ShopTranslator(src)
+    local user = ShopsCore.GetCharacterContext(src)
+    local character = user and user.character
 
     if character and character.xp then
         local level = getLevelFromXP(character.xp)
@@ -17,4 +18,4 @@ BccUtils.RPC:Register("bcc-shops:GetPlayerLevel", function(_, cb, src)
     end
 end)
 
-BccUtils.Versioner.checkFile(GetCurrentResourceName(), 'https://github.com/BryceCanyonCounty/bcc-shops')
+

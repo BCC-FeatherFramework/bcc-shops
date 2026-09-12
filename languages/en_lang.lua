@@ -1,4 +1,4 @@
-Locales["en_lang"] = {
+Feather.Locale.register('en_us', {
     PromptName                      = 'Open Menu',
     BlipName                        = 'Store',
 
@@ -173,7 +173,7 @@ Locales["en_lang"] = {
     shopCreatedSuccess              = "Shop created successfully!",
     shopCreatedFail                 = "Failed to create shop.",
     invalidOwnerId                  = "Invalid owner ID received.",
-    charNotFound                    = "Character not found or missing charidentifier.",
+    charNotFound                    = "Character not found or missing character ID.",
     npcShopNotFound                 = "NPC shop location not found.",
     accessAlreadyExists             = "Access already exists for this player in this shop.",
     notEnoughMoney                  = "You don't have enough money.",
@@ -285,5 +285,19 @@ Locales["en_lang"] = {
     selectCategory                   = "Select Category",
     price_limit_exceeded            = "The entered price exceeds the maximum allowed limit.",
     maxSellPrice                    = "Max Sell Price",
-    maxBuyPrice                     = "Max Buy Price"
-}
+    maxBuyPrice                     = "Max Buy Price",
+
+    -- Shop weapon and management notifications
+    customDesc = "Custom Description",
+    itemUpdateFailed = "Failed to update item.",
+    missingCategoryId = "Please select a category.",
+    noMaxPriceConfigured = "No maximum price is configured for this item.",
+    noPlayersWithAccess = "No players have access to this shop.",
+    shop_cannot_carry_weapon = "You cannot carry this weapon.",
+    shop_sold_weapon = "You sold ",
+    shop_weapon_not_found = "Weapon not found.",
+    unknown = "Unknown",
+    weaponAddedFail = "Failed to add weapon to shop.",
+    weaponAddedSuccess = "Weapon added to shop successfully.",
+    weaponIdMissing = "Please select a weapon.",
+})

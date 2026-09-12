@@ -1,12 +1,14 @@
-BccUtils.RPC:Register("bcc-shops:createNPCStore", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:createNPCStore", function(params, cb, source)
+    local _U = ShopTranslator(source)
+    if not CanManageShops(source) then return cb(false) end
     devPrint("Creating NPC Store: " .. tostring(params.shopName) .. " at " .. tostring(params.shopLocation))
 
     -- Fetch character info
-    local user = VORPcore.getUser(source)
-    local char = user and user.getUsedCharacter
-    local charId = char and char.charIdentifier or "unknown"
-    local firstName = char and char.firstname or "unknown"
-    local lastName = char and char.lastname or "unknown"
+    local user = ShopsCore.GetCharacterContext(source)
+    local char = user and user.character
+    local charId = char and char.characterId or "unknown"
+    local firstName = char and char.firstName or "unknown"
+    local lastName = char and char.lastName or "unknown"
 
     local insertQuery = [[
         INSERT INTO bcc_shops (
@@ -50,10 +52,10 @@ BccUtils.RPC:Register("bcc-shops:createNPCStore", function(params, cb, source)
                     "**Char ID:** `" .. tostring(charId) .. "`"
                 }, "\n")
             }}
-            BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Created", nil, embed)
+            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Created", nil, embed)
 
             NotifyClient(source, _U('shopCreatedSuccess'), "success")
-            BccUtils.RPC:Notify("bcc-shops:RefreshStoreData", {}, source)
+            exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
             cb(true)
         else
             devPrint("Failed to create NPC shop.")
@@ -63,7 +65,9 @@ BccUtils.RPC:Register("bcc-shops:createNPCStore", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:createplayershop", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:createplayershop", function(params, cb, source)
+    local _U = ShopTranslator(source)
+    if not CanManageShops(source) then return cb(false) end
     local ownerId = params.ownerId
     devPrint("Owner ID received: " .. tostring(ownerId))
 
@@ -73,17 +77,17 @@ BccUtils.RPC:Register("bcc-shops:createplayershop", function(params, cb, source)
         return cb(false)
     end
 
-    local user = VORPcore.getUser(ownerId)
-    local char = user and user.getUsedCharacter
-    if not char or not char.charIdentifier then
-        devPrint("Character not found or missing charIdentifier for owner ID: " .. tostring(ownerId))
+    local user = ShopsCore.GetCharacterContext(ownerId)
+    local char = user and user.character
+    if not char or not char.characterId then
+        devPrint("Character not found or missing characterId for owner ID: " .. tostring(ownerId))
         NotifyClient(source, _U('charNotFound'), "warning")
         return cb(false)
     end
 
-    local charId = char.charIdentifier
-    local firstName = char.firstname or "unknown"
-    local lastName = char.lastname or "unknown"
+    local charId = char.characterId
+    local firstName = char.firstName or "unknown"
+    local lastName = char.lastName or "unknown"
 
     local pos_x, pos_y, pos_z, heading = params.pos_x, params.pos_y, params.pos_z, params.storeHeading
     local shopType = params.storeType or "player"
@@ -117,9 +121,9 @@ BccUtils.RPC:Register("bcc-shops:createplayershop", function(params, cb, source)
                     "**Char ID:** `" .. tostring(charId) .. "`"
                 }, "\n")
             }}
-            BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Created", nil, embed)
+            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Created", nil, embed)
 
-            BccUtils.RPC:Notify("bcc-shops:RefreshStoreData", {}, source)
+            exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
             cb(true)
         else
             devPrint("Failed to create player shop.")
@@ -128,7 +132,9 @@ BccUtils.RPC:Register("bcc-shops:createplayershop", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:deleteNPCShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:deleteNPCShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     local shopId = params.shopId
     if not shopId then
         devPrint("Missing shopId")
@@ -139,11 +145,11 @@ BccUtils.RPC:Register("bcc-shops:deleteNPCShop", function(params, cb, src)
     devPrint("Starting deletion for NPC shopId: " .. tostring(shopId))
 
     -- Fetch player character info
-    local user = VORPcore.getUser(src)
-    local char = user and user.getUsedCharacter
-    local charId = char and char.charIdentifier or "unknown"
-    local firstName = char and char.firstname or "unknown"
-    local lastName = char and char.lastname or "unknown"
+    local user = ShopsCore.GetCharacterContext(src)
+    local char = user and user.character
+    local charId = char and char.characterId or "unknown"
+    local firstName = char and char.firstName or "unknown"
+    local lastName = char and char.lastName or "unknown"
 
     -- Fetch shop data
     local shopData = MySQL.query.await('SELECT shop_name, shop_location FROM bcc_shops WHERE shop_id = ?', { shopId })
@@ -180,16 +186,18 @@ BccUtils.RPC:Register("bcc-shops:deleteNPCShop", function(params, cb, src)
         }, "\n")
     }}
 
-    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Deleted", nil, embed)
+    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Deleted", nil, embed)
 
     -- Notify clients
-    BccUtils.RPC:Notify("bcc-shops:clientCleanup", {}, -1)
+    exports['feather-core']:NotifyRPC("bcc-shops:clientCleanup", {}, -1)
     NotifyClient(src, _U("npcstore_deleted_success"), "success")
-    BccUtils.RPC:Notify("bcc-shops:RefreshStoreData", {}, src)
+    exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, src)
     cb(true)
 end)
 
-BccUtils.RPC:Register("bcc-shops:deletePlayerShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:deletePlayerShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     local shopId = params.shopId
     if not shopId then
         devPrint("Missing shopId")
@@ -200,11 +208,11 @@ BccUtils.RPC:Register("bcc-shops:deletePlayerShop", function(params, cb, src)
     devPrint("Starting deletion for player shopId: " .. tostring(shopId))
 
     -- Fetch player character info
-    local user = VORPcore.getUser(src)
-    local char = user and user.getUsedCharacter
-    local charId = char and char.charIdentifier or "unknown"
-    local firstName = char and char.firstname or "unknown"
-    local lastName = char and char.lastname or "unknown"
+    local user = ShopsCore.GetCharacterContext(src)
+    local char = user and user.character
+    local charId = char and char.characterId or "unknown"
+    local firstName = char and char.firstName or "unknown"
+    local lastName = char and char.lastName or "unknown"
 
     -- Fetch shop data
     local shopData = MySQL.query.await('SELECT shop_name, shop_location, owner_id FROM bcc_shops WHERE shop_id = ?', { shopId })
@@ -243,75 +251,52 @@ BccUtils.RPC:Register("bcc-shops:deletePlayerShop", function(params, cb, src)
         }, "\n")
     }}
 
-    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Deleted", nil, embed)
+    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Deleted", nil, embed)
 
     -- Notify clients
-    BccUtils.RPC:Notify("bcc-shops:clientCleanup", {}, -1)
+    exports['feather-core']:NotifyRPC("bcc-shops:clientCleanup", {}, -1)
     NotifyClient(src, _U("playerstore_deleted_success"), "success")
-    BccUtils.RPC:Notify("bcc-shops:RefreshStoreData", {}, src)
+    exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, src)
     cb(true)
 end)
 
 function manageStores(source, isAdmin)
-    if isAdmin then
+    if CanManageShops(source) then
         devPrint("Admin " .. source .. " is managing shops.")
         local players = GetPlayers()
         local playerList = {}
         for _, playerId in ipairs(players) do
-            local player = VORPcore.getUser(playerId)
-            local character = player.getUsedCharacter
-            table.insert(playerList, { id = playerId, name = character.firstname .. ' ' .. character.lastname })
+            local profile = GetShopCharacterProfile(playerId)
+            if profile then
+                table.insert(playerList, { id = playerId, name = profile.firstName .. ' ' .. profile.lastName })
+            end
         end
         MySQL.query('SELECT * FROM bcc_shops', {}, function(shops)
-            BccUtils.RPC:Notify("bcc-shops:OpenManageStoresUI", {
+            exports['feather-core']:NotifyRPC("bcc-shops:OpenManageStoresUI", {
                 shops = shops,
                 players = playerList
             }, source)
         end)
     else
-        VORPcore.NotifyObjective(source, 'You do not have permission to use this command!', 3000)
+        ShopsCore.Notify(source, 'You do not have permission to use this command!', 3000)
     end
 end
 
-RegisterCommand(Config.ManageShopsCommand, function(source, args, rawCommand)
-    local User = VORPcore.getUser(source)
-    if not User then return end
-
-    local group = User.getGroup
-    local job = User.getUsedCharacter.job
-
-    local isAdminGroup = false
-    for _, g in ipairs(Config.adminGroups) do
-        if g == group then
-            isAdminGroup = true
-            break
-        end
-    end
-
-    local isAllowedJob = false
-    for _, j in ipairs(Config.AllowedJobs) do
-        if j == job then
-            isAllowedJob = true
-            break
-        end
-    end
-
-    if isAdminGroup or isAllowedJob then
-        manageStores(source, true)
-    else
-        manageStores(source, false)
-    end
+RegisterCommand(Config.ManageShopsCommand, function(source)
+    if source == 0 then return end
+    manageStores(source)
 end, false)
 
-BccUtils.RPC:Register("bcc-shops:FetchPlayersForOwnerSelection", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchPlayersForOwnerSelection", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local players = {}
 
     -- Optional: Filter by online status, group, etc., using params if needed
     for _, playerId in ipairs(GetPlayers()) do
-        local user = VORPcore.getUser(playerId)
+        local user = ShopsCore.GetCharacterContext(playerId)
         if user then
-            local char = user.getUsedCharacter
-            local name = char and (char.firstname .. " " .. char.lastname) or GetPlayerName(playerId)
+            local char = user.character
+            local name = char and (char.firstName .. " " .. char.lastName) or GetPlayerName(playerId)
             table.insert(players, { id = playerId, name = name })
         end
     end
@@ -319,18 +304,19 @@ BccUtils.RPC:Register("bcc-shops:FetchPlayersForOwnerSelection", function(params
     cb(players)
 end)
 
-BccUtils.RPC:Register("bcc-shops:FetchOnlinePlayers", function(_, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchOnlinePlayers", function(_, cb, source)
+    local _U = ShopTranslator(source)
     local playersForAccess = {}
 
     for _, playerId in ipairs(GetPlayers()) do
         local name = GetPlayerName(playerId)
-        local user = VORPcore.getUser(tonumber(playerId))
-        local character = user and user.getUsedCharacter
+        local user = ShopsCore.GetCharacterContext(tonumber(playerId))
+        local character = user and user.character
         if character then
             table.insert(playersForAccess, {
                 playerId = tonumber(playerId),
-                charId = character.charIdentifier,
-                name = name .. " | ID: " .. character.charIdentifier
+                charId = character.characterId,
+                name = name .. " | ID: " .. character.characterId
             })
         end
     end
@@ -338,7 +324,8 @@ BccUtils.RPC:Register("bcc-shops:FetchOnlinePlayers", function(_, cb, source)
     cb(playersForAccess)
 end)
 
-BccUtils.RPC:Register("bcc-shops:SetPlayerShopBlip", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:SetPlayerShopBlip", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
     local blipHash = tonumber(params.blipHash)
 
@@ -347,18 +334,18 @@ BccUtils.RPC:Register("bcc-shops:SetPlayerShopBlip", function(params, cb, src)
         return cb(false)
     end
 
-    local User = VORPcore.getUser(src)
-    local Character = User and User.getUsedCharacter
-    if not Character or not Character.charIdentifier then
-        devPrint("Character not found or missing charidentifier for owner ID: " .. tostring(src))
+    local User = ShopsCore.GetCharacterContext(src)
+    local Character = User and User.character
+    if not Character or not Character.characterId then
+        devPrint("Character not found or missing character ID for owner ID: " .. tostring(src))
         NotifyClient(src, _U('charNotFound'), "warning")
         return cb(false)
     end
 
-    local charidentifier = Character.charIdentifier
+    local characterId = Character.characterId
     local affectedRows = MySQL.update.await(
         "UPDATE bcc_shops SET blip_hash = ? WHERE shop_name = ? AND owner_id = ?",
-        { blipHash, shopName, charidentifier }
+        { blipHash, shopName, characterId }
     )
 
     if affectedRows and affectedRows > 0 then
@@ -370,7 +357,9 @@ BccUtils.RPC:Register("bcc-shops:SetPlayerShopBlip", function(params, cb, src)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:SetShopBlipEnabled", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:SetShopBlipEnabled", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     local shopName = params.shopName
     local enabled = params.enabled
 
@@ -393,7 +382,9 @@ BccUtils.RPC:Register("bcc-shops:SetShopBlipEnabled", function(params, cb, src)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:CreateCategory", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:CreateCategory", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     if not params or not params.name then return cb(false) end
 
     local label   = (params.label and params.label:match("%S")) and params.label or params.name
@@ -401,7 +392,9 @@ BccUtils.RPC:Register("bcc-shops:CreateCategory", function(params, cb, src)
     cb(result ~= nil)
 end)
 
-BccUtils.RPC:Register("bcc-shops:EditCategory", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:EditCategory", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     if not params or not params.id or not params.name then return cb(false) end
 
     local label   = (params.label and params.label:match("%S")) and params.label or params.name
@@ -409,7 +402,9 @@ BccUtils.RPC:Register("bcc-shops:EditCategory", function(params, cb, src)
     cb(updated and updated > 0)
 end)
 
-BccUtils.RPC:Register("bcc-shops:DeleteCategory", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:DeleteCategory", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    if not CanManageShops(src) then return cb(false) end
     if not params or not params.id then
         NotifyClient(source, _U('missingCategoryId'), "success")
         return cb(false)
@@ -452,12 +447,15 @@ BccUtils.RPC:Register("bcc-shops:DeleteCategory", function(params, cb, src)
 end)
 
 
-BccUtils.RPC:Register("bcc-shops:GetAllCategories", function(_, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:GetAllCategories", function(_, cb, src)
+    local _U = ShopTranslator(src)
     local categories = MySQL.query.await("SELECT id, name, label FROM bcc_shop_categories ORDER BY label ASC")
     cb(categories or {})
 end)
 
-BccUtils.RPC:Register("bcc-shops:EditShop", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:EditShop", function(params, cb, source)
+    local _U = ShopTranslator(source)
+    if not CanManageShops(source) then return cb(false) end
     if not params or not params.shopId then
         devPrint("Missing required parameter: shopId")
         return cb(false)
@@ -510,7 +508,7 @@ end)
 
 local npcLoopStarted = false
 
-BccUtils.RPC:Register("bcc-shops:StartNpcPurchases", function(_, cb)
+exports['feather-core']:RegisterRPC("bcc-shops:StartNpcPurchases", function(_, cb)
     print(" NPC purchase loop status: " .. tostring(npcLoopStarted))
 
     npcLoopStarted = true -- always allow (idempotent)

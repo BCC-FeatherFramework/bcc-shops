@@ -1,37 +1,7 @@
 function Notify(message, typeOrDuration, maybeDuration)
-    local notifyType = "info"
-    local notifyDuration = 4000
-
-    -- Detect which argument is which
-    if type(typeOrDuration) == "string" then
-        notifyType = typeOrDuration
-        notifyDuration = tonumber(maybeDuration) or 4000
-    elseif type(typeOrDuration) == "number" then
-        notifyDuration = typeOrDuration
-    end
-
-    if Config.Notify == "feather-menu" then
-        FeatherMenu:Notify({
-            message = message,
-            type = notifyType,
-            autoClose = notifyDuration,
-            position = "top-center",
-            transition = "slide",
-            icon = true,
-            hideProgressBar = false,
-            rtl = false,
-            style = {},
-            toastStyle = {},
-            progressStyle = {}
-        })
-    elseif Config.Notify == "vorp-core" then
-        -- Only message and duration supported
-        VORPcore.NotifyRightTip(message, notifyDuration)
-    else
-        print("^1[Notify] Invalid Config.Notify: " .. tostring(Config.Notify))
-    end
+    local duration = type(typeOrDuration) == 'number' and typeOrDuration or tonumber(maybeDuration) or 4000
+    return exports['feather-notify']:ShowNotification({ message = tostring(message), duration = duration, style = 'right' })
 end
-
-BccUtils.RPC:Register("bcc-shop:NotifyClient", function(data)
+exports['feather-core']:RegisterRPC('bcc-shop:NotifyClient', function(data)
     Notify(data.message, data.type, data.duration)
 end)

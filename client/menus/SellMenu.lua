@@ -1,7 +1,7 @@
 function SellMenu(shopName, returnPage)
     devPrint("Entered SellMenu for shop: " .. tostring(shopName))
 
-    BccUtils.RPC:Call("bcc-shops:GetShopItems", { shopName = shopName }, function(data)
+    exports['feather-core']:CallRPC("bcc-shops:GetShopItems", { shopName = shopName }, function(data)
         if (not data.items or next(data.items) == nil) and (not data.weapons or next(data.weapons) == nil) then
             Notify(_U("shop_no_items_found_tosell"), "error", 4000)
             return
@@ -75,7 +75,7 @@ function SellMenu(shopName, returnPage)
                 indexMap[visibleIndex] = item
 
                 local imgName = (item.name or "")
-                local imgPath = "nui://vorp_inventory/html/img/items/" .. imgName .. ".png"
+                local imgPath = "nui://feather-inventory/ui/images/items/" .. imgName .. ".png"
 
                 table.insert(imageBoxItems, {
                     type  = "imagebox",
@@ -170,7 +170,7 @@ end
 function RequestSellQuantity(item, shopName, isWeapon)
     devPrint("RequestSellQuantity called for item: " .. item.item_name)
 
-    local playerLevel = BccUtils.RPC:CallAsync("bcc-shops:GetPlayerLevel", {})
+    local playerLevel = exports['feather-core']:CallRPCAsync("bcc-shops:GetPlayerLevel", {})
     devPrint("Received player level: " .. playerLevel)
 
     if item.level_required > playerLevel then
@@ -181,7 +181,7 @@ function RequestSellQuantity(item, shopName, isWeapon)
     end
 
     devPrint("Requesting item count from server via RPC")
-    local countItem = BccUtils.RPC:CallAsync("bcc-shops:GetItemCount", {
+    local countItem = exports['feather-core']:CallRPCAsync("bcc-shops:GetItemCount", {
         item = item.item_name,
         percentage = 100
     })
@@ -195,7 +195,7 @@ function RequestSellQuantity(item, shopName, isWeapon)
 
     local inputPage = BCCShopsMainMenu:RegisterPage('entry:quantity')
     local quantity = 1
-    local imgPath = "nui://vorp_inventory/html/img/items/" .. item.item_name .. ".png"
+    local imgPath = "nui://feather-inventory/ui/images/items/" .. item.item_name .. ".png"
 
     local html = [[
         <div style="margin: auto; padding: 20px 30px;">
@@ -318,7 +318,7 @@ function ProcessSale(shopName, item, quantity, isWeapon)
     local totalCost = item.sell_price * quantity
     devPrint("Processing sale for item: " .. item.item_name .. ", Quantity: " .. quantity .. ", Total: " .. totalCost)
 
-    BccUtils.RPC:Call("bcc-shops:SellItem", {
+    exports['feather-core']:CallRPC("bcc-shops:SellItem", {
         shopName = shopName,
         itemName = item.item_name,
         quantity = quantity,

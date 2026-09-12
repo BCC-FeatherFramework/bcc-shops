@@ -65,7 +65,7 @@ end
 function OpenEditItemMenu(shopName)
     devPrint("Opening Edit Item Menu for store: " .. tostring(shopName))
 
-    BccUtils.RPC:Call("bcc-shops:GetItemsForShop", { shopName = shopName }, function(success, result)
+    exports['feather-core']:CallRPC("bcc-shops:GetItemsForShop", { shopName = shopName }, function(success, result)
         if not success or type(result) ~= "table" then
             Notify(_U("failedToFetchItems"), "error", 4000)
             return
@@ -92,7 +92,7 @@ function OpenEditItemMenu(shopName)
             -- Expecting rows to contain either item_* or weapon_* fields plus pricing/stock
             local displayName = row.item_label or row.weapon_label or row.item_name or row.weapon_name or _U('unknown')
             local internal    = (row.item_name or row.weapon_name or "unknown")
-            local imgPath     = "nui://vorp_inventory/html/img/items/" .. internal .. ".png"
+            local imgPath     = "nui://feather-inventory/ui/images/items/" .. internal .. ".png"
 
             idx               = idx + 1
             combinedRows[idx] = row
@@ -195,7 +195,7 @@ function OpenEditPlayerItemMenu(shopName, item)
     local currentCategory                     = tonumber(item.category_id or item.category) or nil
 
     -- Fetch categories (reuse same source as NPC edits)
-    local categories                          = BccUtils.RPC:CallAsync("bcc-shops:GetShopCategories")
+    local categories                          = exports['feather-core']:CallRPCAsync("bcc-shops:GetShopCategories")
     local categoryOptions, selectedCategoryId = {}, currentCategory
 
     if categories and #categories > 0 then
@@ -338,7 +338,7 @@ function OpenEditPlayerItemMenu(shopName, item)
 
         devPrint("[Player Edit Item] Payload: " .. json.encode(payload))
 
-        BccUtils.RPC:Call("bcc-shops:EditItemPlayerShop", payload, function(success, err)
+        exports['feather-core']:CallRPC("bcc-shops:EditItemPlayerShop", payload, function(success, err)
             if success then
                 Notify(_U('itemUpdated'), "success", 4000)
                 OpenEditItemMenu(shopName)
@@ -463,7 +463,7 @@ function OpenEditPlayerWeaponMenu(shopName, weapon)
 
         devPrint("[Player Edit Weapon] Payload: " .. json.encode(payload))
 
-        BccUtils.RPC:Call("bcc-shops:EditWeaponPlayerShop", payload, function(success, err)
+        exports['feather-core']:CallRPC("bcc-shops:EditWeaponPlayerShop", payload, function(success, err)
             if success then
                 Notify(_U('itemUpdated'), "success", 4000)
                 OpenEditItemMenu(shopName)

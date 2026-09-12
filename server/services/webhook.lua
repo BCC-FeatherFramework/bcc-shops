@@ -1,13 +1,14 @@
-BccUtils.RPC:Register("bcc-shops:SetWebhook", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:SetWebhook", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopId = params.shopId
     local webhook = params.webhook
-    local user = VORPcore.getUser(source)
+    local user = ShopsCore.GetCharacterContext(source)
     if not user then return cb(false) end
 
-    local character = user.getUsedCharacter
+    local character = user.character
     if not character then return cb(false) end
 
-    local characterId = character.charIdentifier
+    local characterId = character.characterId
 
     if not shopId or not webhook then
         devPrint("Missing shopId or webhook")
@@ -33,7 +34,8 @@ BccUtils.RPC:Register("bcc-shops:SetWebhook", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetShopWebhook", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:GetShopWebhook", function(params, cb, source)
+    local _U = ShopTranslator(source)
     devPrint("GetShopWebhook RPC triggered for shopId: " .. tostring(params.shopId))
     local shopId = params.shopId
     if not shopId then return cb(nil) end

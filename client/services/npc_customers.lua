@@ -45,7 +45,7 @@ RegisterCommand("npcbuyrandomweapon", function()
     local shopName = "Arme si Munitie"
     local quantity = 1
 
-    BccUtils.RPC:Call("bcc-shops:FetchShopItems", { shopName = shopName }, function(result)
+    exports['feather-core']:CallRPC("bcc-shops:FetchShopItems", { shopName = shopName }, function(result)
         if not result or not result.weapons then
             devPrint("Failed to fetch weapons from shop: " .. shopName)
             return
@@ -85,7 +85,7 @@ RegisterCommand("npcbuyrandomweapon", function()
 
             devPrint("Attempting NPC weapon purchase: " .. json.encode(payload))
 
-            BccUtils.RPC:Call("bcc-shops:PurchaseWeaponNPC", payload, function(success)
+            exports['feather-core']:CallRPC("bcc-shops:PurchaseWeaponNPC", payload, function(success)
                 if success then
                     devPrint("NPC successfully bought: " .. weapon.label)
                 else

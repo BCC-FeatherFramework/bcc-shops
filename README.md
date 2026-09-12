@@ -38,10 +38,10 @@
 
 - 🧠 **Feather Menu Interface**  
   All menus are powered by `feather-menu`, offering a clean, responsive experience.
-  Most of the notifications are `FeatherMenu:Notify` , no more vorp notification.
+  Notifications are delivered through Feather.
 
 - 🌍 **Multilingual Support**  
-  Fully localized in English and Romanian, with support for adding more languages using `_U("key")`.
+  Localized in English, Romanian, and Polish through `Feather.Locale.register`, with `_U("key")` for translation calls.
 
 ---
 
@@ -49,25 +49,35 @@
 
 This system depends on the following RedM/FXServer resources:
 
-- `vorp_core`
-- `vorp_inventory`
-- `feather-menu`
-- `bcc-utils`
 - `oxmysql`
+- `feather-core`
+- `feather-character`
+- `feather-roles`
+- `feather-inventory`
+- `feather-weapons`
+- `feather-toolkit`
+- `feather-notify`
+- `feather-menu-v2`
+- `bcc-banks`
 
 ---
 
 ## ⚙️ Installation
 
-1. **Download the bcc-shops last version** into your server’s `resources/` folder:
+1. **Download the latest version of bcc-shops** into your server’s `resources/` folder.
 
-2. **Add to your `server.cfg`** after all dependencies:
+2. **Add `bcc-shops` to your `server.cfg`** after all dependencies:
    ```txt
-   ensure vorp_core
-   ensure vorp_inventory
-   ensure feather-menu
-   ensure bcc-utils
    ensure oxmysql
+   ensure feather-core
+   ensure feather-character
+   ensure feather-roles
+   ensure feather-inventory
+   ensure feather-weapons
+   ensure feather-toolkit
+   ensure feather-notify
+   ensure feather-menu-v2
+   ensure bcc-banks
    ensure bcc-shops
    ```
 
@@ -77,13 +87,13 @@ This system depends on the following RedM/FXServer resources:
 
 ## 🔧 Configuration
 
-Located in `config.lua`, the few basic options include:
+Basic settings are available in `config.lua`:
 
-- `defaultlang` – Language file to use (`en_lang` or `ro_lang`)
+- `defaultlang` – Fallback locale (`en_us`, `ro`, or `pl`); Feather account preferences select the player locale
 - `keys.access` – Interaction key for shop prompt (default: **G**)
-- `ManageShopsCommand` – Command for opening admin management menu
+- `ManageShopsCommand` – Command that opens the admin management menu
 - `Webhook` – Global Discord webhook URL
-- `adminGroups`, `AllowedJobs` – Controls admin access to management UI
+- `ManagementRoles` – Controls admin access to management UI
 - `BlipStyles` – Configure available blip icons
 - `NPC` – Control NPC buyer behavior and spawn points
 

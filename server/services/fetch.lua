@@ -1,8 +1,9 @@
-BccUtils.RPC:Register("bcc-shops:FetchNPCInventory", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchNPCInventory", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
     devPrint("[RPC:Server] FetchInventory called by source " .. tostring(src) .. " for shop: " .. tostring(shopName))
 
-    local inventory = exports.vorp_inventory:getUserInventoryItems(src)
+    local inventory = ShopsInventory:GetCharacterItems(src)
     devPrint("[RPC:Server] Retrieved inventory with " .. tostring(#inventory or 0) .. " items.")
 
     cb({
@@ -16,7 +17,7 @@ function FetchAllPlayerShops()
     return result or {}
 end
 
-BccUtils.RPC:Register("bcc-shops:GetAllPlayerShops", function(_, cb)
+exports['feather-core']:RegisterRPC("bcc-shops:GetAllPlayerShops", function(_, cb)
     devPrint("📡 RPC called: bcc-shops:GetAllPlayerShops")
     local shops = FetchAllPlayerShops()
 
@@ -32,7 +33,8 @@ BccUtils.RPC:Register("bcc-shops:GetAllPlayerShops", function(_, cb)
     cb(shops)
 end)
 
-BccUtils.RPC:Register("bcc-shops:fetchPlayerInventory", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:fetchPlayerInventory", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local result = {
         inventory = {},
         weapons = {},
@@ -41,7 +43,7 @@ BccUtils.RPC:Register("bcc-shops:fetchPlayerInventory", function(params, cb, sou
 
     devPrint("[fetchPlayerInventory] Fetching inventory for source: " .. tostring(source))
 
-    exports.vorp_inventory:getUserInventoryItems(source, function(inventory)
+    ShopsInventory:GetCharacterItems(source, function(inventory)
         devPrint("[fetchPlayerInventory] Inventory items fetched: " .. json.encode(inventory))
 
         for _, item in ipairs(inventory) do
@@ -50,7 +52,7 @@ BccUtils.RPC:Register("bcc-shops:fetchPlayerInventory", function(params, cb, sou
 
         result.inventory = inventory
 
-        exports.vorp_inventory:getUserInventoryWeapons(source, function(weapons)
+        ShopsInventory:GetCharacterWeapons(source, function(weapons)
             devPrint("[fetchPlayerInventory] Inventory weapons fetched: " .. json.encode(weapons))
 
             for _, weapon in ipairs(weapons) do
@@ -65,17 +67,18 @@ BccUtils.RPC:Register("bcc-shops:fetchPlayerInventory", function(params, cb, sou
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:fetchPlayerStoreInfo", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:fetchPlayerStoreInfo", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
-    local user = VORPcore.getUser(src)
-    local character = user and user.getUsedCharacter
+    local user = ShopsCore.GetCharacterContext(src)
+    local character = user and user.character
 
     if not character then
         devPrint("Character not found for source " .. tostring(src))
         return cb(false)
     end
 
-    local charId = character.charIdentifier
+    local charId = character.characterId
 
     local storeResult = MySQL.query.await(
         'SELECT shop_id, inv_limit, ledger, owner_id FROM bcc_shops WHERE shop_name = ?', {
@@ -123,7 +126,8 @@ BccUtils.RPC:Register("bcc-shops:fetchPlayerStoreInfo", function(params, cb, src
     })
 end)
 
-BccUtils.RPC:Register("bcc-shops:FetchShopItems", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params, cb, source)
+    local _U = ShopTranslator(source)
     if not params or not params.shopName then
         devPrint("Missing shopName param")
         return cb({ items = {}, weapons = {}, shopName = "unknown" })
@@ -212,7 +216,7 @@ BccUtils.RPC:Register("bcc-shops:FetchShopItems", function(params, cb, source)
     cb(result)
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetShopCategories", function(_, cb)
+exports['feather-core']:RegisterRPC("bcc-shops:GetShopCategories", function(_, cb)
     local result = MySQL.query.await([[
         SELECT id, name, label FROM bcc_shop_categories ORDER BY label ASC
     ]])
@@ -229,7 +233,8 @@ BccUtils.RPC:Register("bcc-shops:GetShopCategories", function(_, cb)
     cb(categories)
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetShopItems", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
 
     local rows = MySQL.query.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName })
@@ -308,7 +313,8 @@ BccUtils.RPC:Register("bcc-shops:GetShopItems", function(params, cb, src)
     cb(result)
 end)
 
-BccUtils.RPC:Register("bcc-shops:FetchPlayerShops", function(_, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchPlayerShops", function(_, cb, src)
+    local _U = ShopTranslator(src)
     local query = 'SELECT * FROM bcc_shops WHERE owner_id IS NOT NULL'
     local result = MySQL.query.await(query, {})
 
@@ -323,7 +329,8 @@ BccUtils.RPC:Register("bcc-shops:FetchPlayerShops", function(_, cb, src)
     cb(result or {})
 end)
 
-BccUtils.RPC:Register("bcc-shops:FetchNPCShops", function(_, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchNPCShops", function(_, cb, src)
+    local _U = ShopTranslator(src)
     local query = 'SELECT * FROM bcc_shops WHERE is_npc_shop = 1'
     local result = MySQL.query.await(query, {})
 
@@ -338,7 +345,8 @@ BccUtils.RPC:Register("bcc-shops:FetchNPCShops", function(_, cb, src)
     cb(result or {})
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetAccessList", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:GetAccessList", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopName = params.shopName
     if not shopName then return cb(nil) end
 
@@ -354,14 +362,14 @@ BccUtils.RPC:Register("bcc-shops:GetAccessList", function(params, cb, source)
 
     for _, entry in pairs(accessList) do
         for _, playerSrc in ipairs(GetPlayers()) do
-            local user = VORPcore.getUser(tonumber(playerSrc))
+            local user = ShopsCore.GetCharacterContext(tonumber(playerSrc))
             if user then
-                local character = user.getUsedCharacter
-                if character and tostring(character.charIdentifier) == tostring(entry.character_id) then
+                local character = user.character
+                if character and tostring(character.characterId) == tostring(entry.character_id) then
                     table.insert(results, {
-                        character_id = character.charIdentifier,
-                        firstname = character.firstname,
-                        lastname = character.lastname
+                        character_id = character.characterId,
+                        firstname = character.firstName,
+                        lastname = character.lastName
                     })
                 end
             end
@@ -371,7 +379,8 @@ BccUtils.RPC:Register("bcc-shops:GetAccessList", function(params, cb, source)
     cb(results)
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetItemCount", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:GetItemCount", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local itemName = params.item
     local percentage = params.percentage or 100
     local metadata = params.metadata or {}
@@ -384,13 +393,14 @@ BccUtils.RPC:Register("bcc-shops:GetItemCount", function(params, cb, src)
     devPrint("Checking item count for player " ..
         src .. " | Item: " .. itemName .. " | Percentage ≥ " .. percentage)
 
-    exports.vorp_inventory:getItemCount(src, function(count)
+    ShopsInventory:getItemCount(src, function(count)
         devPrint("Player has " .. (count or 0) .. " of item '" .. itemName .. "'")
         cb(count or 0)
     end, itemName, metadata, percentage)
 end)
 
-BccUtils.RPC:Register("bcc-shops:GetItemsForShop", function(data, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:GetItemsForShop", function(data, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = data and data.shopName
     if not shopName then
         return cb(false, "[ERROR] Shop name is required.")
@@ -465,7 +475,8 @@ BccUtils.RPC:Register("bcc-shops:GetItemsForShop", function(data, cb, src)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:FetchWeaponItems", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:FetchWeaponItems", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
 
     if not shopName then

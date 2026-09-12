@@ -1,5 +1,6 @@
-BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
-    local Character = VORPcore.getUser(src).getUsedCharacter
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItem", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    local Character = ShopsCore.GetCharacterContext(src).character
     local isWeapon = params.isWeapon
 
     local itemDetails
@@ -64,12 +65,17 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
         return cb(false)
     end
 
-    local canCarryItems = exports.vorp_inventory:canCarryItems(src, params.quantity, nil)
-    local canCarry = exports.vorp_inventory:canCarryItem(src, params.itemName, params.quantity, nil)
+    local canCarryItems = ShopsInventory:canCarryItems(src, params.quantity, nil)
+    local canCarry = ShopsInventory:canCarryItem(src, params.itemName, params.quantity, nil)
 
     if canCarry and canCarryItems then
-        Character.removeCurrency(0, params.total)
-        exports.vorp_inventory:addItem(src, params.itemName, params.quantity)
+        Character.DebitWallet(0, params.total)
+        local granted, failure = pcall(function() ShopsInventory:addItem(src, params.itemName, params.quantity) end)
+        if not granted then
+            Character.CreditWallet(0, params.total)
+            devPrint('Inventory grant failed:', failure)
+            return cb(false)
+        end
 
         devPrint("Transaction processed. Removed currency and added item:", params.itemName, "x" .. params.quantity)
 
@@ -106,8 +112,8 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
             color = 3145631,
             title = "Item Purchased",
             description = table.concat({
-                "**Character Name:** `" .. Character.firstname .. " " .. Character.lastname .. "`",
-                "**Character ID:** `" .. Character.charIdentifier .. "`",
+                "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
+                "**Character ID:** `" .. Character.characterId .. "`",
                 "**Item Name:** `" .. itemDetails.item_label .. "`",
                 "**Item ID:** `" .. params.itemName .. "`",
                 "**Quantity:** `" .. params.quantity .. "`",
@@ -118,7 +124,7 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
 
         if shopInfo.webhook_link then
             devPrint("Sending to shop-specific webhook:", shopInfo.webhook_link)
-            BccUtils.Discord.sendMessage(
+            ShopsToolkit.Discord.sendMessage(
                 shopInfo.webhook_link,
                 Config.WebhookTitle,
                 Config.WebhookAvatar,
@@ -131,7 +137,7 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
         end
 
         devPrint("Sending to global webhook:", Config.Webhook)
-        BccUtils.Discord.sendMessage(
+        ShopsToolkit.Discord.sendMessage(
             Config.Webhook,
             Config.WebhookTitle,
             Config.WebhookAvatar,
@@ -148,11 +154,11 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItem", function(params, cb, src)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:PurchaseItemNPC", function(params, cb)
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItemNPC", function(params, cb)
     local Character = {
         firstname = "Shop",
         lastname = "Visitor",
-        charIdentifier = "NPC"
+        characterId = "NPC"
     }
 
     if not params.itemName then
@@ -235,7 +241,7 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItemNPC", function(params, cb)
     -- Send to shop-specific webhook if available
     if shopInfo.webhook_link then
         devPrint("[NPC Purchase] Sending to shop-specific webhook: " .. shopInfo.webhook_link)
-        BccUtils.Discord.sendMessage(
+        ShopsToolkit.Discord.sendMessage(
             shopInfo.webhook_link,
             Config.WebhookTitle,
             Config.WebhookAvatar,
@@ -249,7 +255,7 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItemNPC", function(params, cb)
 
     -- Always send to global webhook
     devPrint("[NPC Purchase] Sending to global webhook: " .. Config.Webhook)
-    BccUtils.Discord.sendMessage(
+    ShopsToolkit.Discord.sendMessage(
         Config.Webhook,
         Config.WebhookTitle,
         Config.WebhookAvatar,
@@ -261,7 +267,8 @@ BccUtils.RPC:Register("bcc-shops:PurchaseItemNPC", function(params, cb)
     cb(true)
 end)
 
-BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:SellItem", function(params, cb, src)
+    local _U = ShopTranslator(src)
     devPrint("SellItem called by src:", src)
 
     if not params or not params.itemName or not params.shopName or not params.quantity or not params.total then
@@ -270,19 +277,19 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
         return cb(false)
     end
 
-    local user = VORPcore.getUser(src)
+    local user = ShopsCore.GetCharacterContext(src)
     if not user then
         devPrint("No user found for src:", src)
         return cb(false)
     end
 
-    local Character = user.getUsedCharacter
+    local Character = user.character
     if not Character then
         devPrint("No character found for src:", src)
         return cb(false)
     end
 
-    devPrint("Character:", Character.firstname, Character.lastname, "XP:", Character.xp)
+    devPrint("Character:", Character.firstName, Character.lastName, "XP:", Character.xp)
 
     local itemResult = MySQL.query.await('SELECT * FROM bcc_shop_items WHERE item_name = ?', { params.itemName })
     local itemDetails = itemResult and itemResult[1] or nil
@@ -333,7 +340,7 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
         return cb(false)
     end
 
-    local removed = exports.vorp_inventory:subItem(src, params.itemName, params.quantity, {})
+    local removed = ShopsInventory:subItem(src, params.itemName, params.quantity, {})
     if removed then
         devPrint("Removed item from inventory. Proceeding with sale.")
 
@@ -345,7 +352,7 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
                 return cb(false)
             end
 
-            Character.addCurrency(0, params.total)
+            Character.CreditWallet(0, params.total)
             devPrint("Gave player money (ledger deducted):", params.total)
 
             -- move stock: sell_quantity -= qty, buy_quantity += qty
@@ -359,7 +366,7 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
 
             MySQL.update.await("UPDATE bcc_shops SET ledger = ledger - ? WHERE shop_id = ?", { params.total, shopId })
         else
-            Character.addCurrency(0, params.total)
+            Character.CreditWallet(0, params.total)
             devPrint("Gave player money (npc shop):", params.total)
 
             MySQL.update.await(
@@ -388,8 +395,8 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
             color = 3145631,
             title = "🛒 Item Sold",
             description = table.concat({
-                "**Character Name:** `" .. Character.firstname .. " " .. Character.lastname .. "`",
-                "**Character ID:** `" .. Character.charIdentifier .. "`",
+                "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
+                "**Character ID:** `" .. Character.characterId .. "`",
                 "**Item Name:** `" .. itemDetails.item_label .. "`",
                 "**Item ID:** `" .. params.itemName .. "`",
                 "**Quantity:** `" .. params.quantity .. "`",
@@ -401,7 +408,7 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
         -- Send to shop-specific webhook if present
         if shopInfo and shopInfo.webhook_link then
             devPrint("📤 Sending to shop-specific webhook:", shopInfo.webhook_link)
-            BccUtils.Discord.sendMessage(
+            ShopsToolkit.Discord.sendMessage(
                 shopInfo.webhook_link,
                 Config.WebhookTitle,
                 Config.WebhookAvatar,
@@ -415,7 +422,7 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
 
         -- Always send to global webhook (Config.Webhook)
         devPrint("📤 Sending to global webhook:", Config.Webhook)
-        BccUtils.Discord.sendMessage(
+        ShopsToolkit.Discord.sendMessage(
             Config.Webhook,
             Config.WebhookTitle,
             Config.WebhookAvatar,
@@ -432,8 +439,9 @@ BccUtils.RPC:Register("bcc-shops:SellItem", function(params, cb, src)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:PurchaseWeapon", function(params, cb, src)
-    local Character = VORPcore.getUser(src).getUsedCharacter
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeapon", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    local Character = ShopsCore.GetCharacterContext(src).character
     local weaponName = params.weaponName
     local shopName = params.shopName
 
@@ -491,31 +499,24 @@ BccUtils.RPC:Register("bcc-shops:PurchaseWeapon", function(params, cb, src)
         return cb(false)
     end
 
-    local canCarry = exports.vorp_inventory:canCarryWeapons(src, params.quantity, nil, weaponName)
+    local canCarry = ShopsInventory:canCarryWeapons(src, params.quantity, nil, weaponName)
     if not canCarry then
         NotifyClient(src, _U("shop_cannot_carry_weapon"), "error")
         return cb(false)
     end
 
+    local issuedInstances = {}
     for i = 1, params.quantity do
-        local serial = nil
-        local label = weaponDetails.label
-        local ammo = { ["nothing"] = 0 }
-        local components = { ["nothing"] = 0 }
-
-        exports.vorp_inventory:createWeapon(
-            src,
-            weaponName,
-            ammo,
-            components,
-            {},
-            nil,
-            serial,
-            label
-        )
+        local ok, instance = pcall(function() return ShopsInventory:createWeapon(src, weaponName) end)
+        if not ok then
+            for _, instanceId in ipairs(issuedInstances) do ShopsInventory:subWeapon(src, instanceId) end
+            devPrint('Weapon issuance failed:', instance)
+            return cb(false)
+        end
+        issuedInstances[#issuedInstances + 1] = instance
     end
 
-    Character.removeCurrency(0, params.total)
+    Character.DebitWallet(0, params.total)
 
     MySQL.update.await(
         'UPDATE bcc_shop_weapon_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
@@ -540,8 +541,8 @@ BccUtils.RPC:Register("bcc-shops:PurchaseWeapon", function(params, cb, src)
         color = 3145631,
         title = "Item Purchased",
         description = table.concat({
-            "**Character Name:** `" .. Character.firstname .. " " .. Character.lastname .. "`",
-            "**Character ID:** `" .. Character.charIdentifier .. "`",
+            "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
+            "**Character ID:** `" .. Character.characterId .. "`",
             "**Weapon Name:** `" .. weaponDetails.label .. "`",
             "**Weapon ID:** `" .. weaponName .. "`",
             "**Quantity:** `" .. params.quantity .. "`",
@@ -551,20 +552,20 @@ BccUtils.RPC:Register("bcc-shops:PurchaseWeapon", function(params, cb, src)
     }
 
     devPrint("[PurchaseWeapon] Sending to shop-specific webhook:", webhook)
-    BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, message.title, nil, { message })
+    ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, message.title, nil, { message })
 
     devPrint("[PurchaseWeapon] Sending to global webhook:", Config.Webhook)
-    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, message.title, nil,
+    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, message.title, nil,
         { message })
 
     cb(true)
 end)
 
-BccUtils.RPC:Register("bcc-shops:PurchaseWeaponNPC", function(params, cb)
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeaponNPC", function(params, cb)
     local Character = {
         firstname = "Shop",
         lastname = "Visitor",
-        charIdentifier = "NPC"
+        characterId = "NPC"
     }
 
     local weaponName = params.weaponName
@@ -639,18 +640,19 @@ BccUtils.RPC:Register("bcc-shops:PurchaseWeaponNPC", function(params, cb)
         -- Send to shop-specific webhook
         if webhook then
             devPrint("📤 Sending to shop-specific webhook: " .. webhook)
-            BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
+            ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
         end
 
         -- Send to global fallback webhook
-        BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
+        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
 
         cb(true)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
-    local Character = VORPcore.getUser(src).getUsedCharacter
+exports['feather-core']:RegisterRPC("bcc-shops:SellWeapon", function(params, cb, src)
+    local _U = ShopTranslator(src)
+    local Character = ShopsCore.GetCharacterContext(src).character
 
     if not params.weaponName then
         devPrint("[SellWeapon] weaponName is nil")
@@ -706,7 +708,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
         return cb(false)
     end
 
-    exports.vorp_inventory:subItem(src, params.weaponName, params.quantity, {}, function(success)
+    ShopsInventory:subItem(src, params.weaponName, params.quantity, {}, function(success)
         if not success then
             NotifyClient(src, _U("shop_failed_remove_item"), "error")
             return cb(false)
@@ -720,7 +722,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                         return cb(false)
                     end
 
-                    Character.addCurrency(0, params.total)
+                    Character.CreditWallet(0, params.total)
                     MySQL.Async.execute(
                         'UPDATE bcc_shop_weapon_items SET sell_quantity = sell_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
                         {
@@ -752,7 +754,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                     -- Send to shop-specific webhook
                     if webhook then
                         devPrint("Sending to shop-specific webhook: " .. webhook)
-                        BccUtils.Discord.sendMessage(webhook,
+                        ShopsToolkit.Discord.sendMessage(webhook,
                             Config.WebhookTitle,
                             Config.WebhookAvatar,
                             "🛒 Weapon sold",
@@ -763,8 +765,8 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                                     title = "🛒 Weapon sold",
                                     description = table.concat({
                                         "**Character Name:** `" ..
-                                        Character.firstname .. " " .. Character.lastname .. "`",
-                                        "**Character ID:** `" .. Character.charIdentifier .. "`",
+                                        Character.firstName .. " " .. Character.lastName .. "`",
+                                        "**Character ID:** `" .. Character.characterId .. "`",
                                         "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
                                         "**Weapon ID:** `" .. params.weaponName .. "`",
                                         "**Quantity:** `" .. params.quantity .. "`",
@@ -777,7 +779,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                     end
 
                     devPrint("Sending to global webhook: " .. Config.Webhook)
-                    BccUtils.Discord.sendMessage(
+                    ShopsToolkit.Discord.sendMessage(
                         Config.Webhook,
                         Config.WebhookTitle,
                         Config.WebhookAvatar,
@@ -789,8 +791,8 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                                 title = "🛒 Weapon Sold",
                                 description = table.concat({
                                     "**Character Name:** `" ..
-                                    Character.firstname .. " " .. Character.lastname .. "`",
-                                    "**Character ID:** `" .. Character.charIdentifier .. "`",
+                                    Character.firstName .. " " .. Character.lastName .. "`",
+                                    "**Character ID:** `" .. Character.characterId .. "`",
                                     "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
                                     "**Weapon ID:** `" .. params.weaponName .. "`",
                                     "**Quantity:** `" .. params.quantity .. "`",
@@ -802,7 +804,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                     )
                 end)
         else
-            Character.addCurrency(0, params.total)
+            Character.CreditWallet(0, params.total)
             MySQL.Async.execute(
                 'UPDATE bcc_shop_weapon_items SET sell_quantity = sell_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
                 {
@@ -815,7 +817,7 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                 "success")
 
             devPrint("Sending to global webhook: " .. Config.Webhook)
-            BccUtils.Discord.sendMessage(
+            ShopsToolkit.Discord.sendMessage(
                 Config.Webhook,
                 Config.WebhookTitle,
                 Config.WebhookAvatar,
@@ -826,8 +828,8 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
                         color = 3145631,
                         title = "🛒 Weapon Sold",
                         description = table.concat({
-                            "**Character Name:** `" .. Character.firstname .. " " .. Character.lastname .. "`",
-                            "**Character ID:** `" .. Character.charIdentifier .. "`",
+                            "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
+                            "**Character ID:** `" .. Character.characterId .. "`",
                             "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
                             "**Weapon ID:** `" .. params.weaponName .. "`",
                             "**Quantity:** `" .. params.quantity .. "`",
@@ -843,7 +845,8 @@ BccUtils.RPC:Register("bcc-shops:SellWeapon", function(params, cb, src)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:AddItemNPCShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName      = params.shopName
     local itemLabel     = params.itemLabel
     local itemName      = params.itemName
@@ -923,7 +926,8 @@ BccUtils.RPC:Register("bcc-shops:AddItemNPCShop", function(params, cb, src)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:AddBuyItem", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopName = params.shopName
     local itemLabel = params.itemLabel
     local itemName = params.itemName
@@ -955,12 +959,12 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
     local shopId = shopResult[1].shop_id
     local webhook = shopResult[1].webhook_link
 
-    local user = VORPcore.getUser(source)
-    local character = user.getUsedCharacter
-    local charId = character.charIdentifier
-    local firstName = character.firstname
+    local user = ShopsCore.GetCharacterContext(source)
+    local character = user.character
+    local charId = character.characterId
+    local firstName = character.firstName
 
-    exports.vorp_inventory:getItem(source, itemName, function(playerItem)
+    ShopsInventory:getItem(source, itemName, function(playerItem)
         if playerItem and playerItem.count >= quantity then
             local hasDurability = playerItem.usages
                 or playerItem.durability
@@ -987,7 +991,7 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
                     })
 
                 if rowsChanged and rowsChanged > 0 then
-                    exports.vorp_inventory:subItem(source, itemName, quantity, {}, function(success)
+                    ShopsInventory:subItem(source, itemName, quantity, {}, function(success)
                         if success then
                 devPrint("Item quantity updated and removed from inventory")
                 NotifyClient(source, "Item quantity updated in shop", "success")
@@ -1009,11 +1013,11 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
                             }
 
                             if webhook then
-                                BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                                ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
                                     "🛒 Item Updated in Shop", nil, message)
                             end
 
-                            BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
                                 "🛒 Item Updated in Shop", nil, message)
 
                             cb(true)
@@ -1037,7 +1041,7 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
                 })
 
                 if insertSuccess then
-                    exports.vorp_inventory:subItem(source, itemName, quantity, {}, function(success)
+                    ShopsInventory:subItem(source, itemName, quantity, {}, function(success)
                         if success then
                             devPrint("New item added to shop and removed from inventory")
                             NotifyClient(source, "Item added to shop", "success")
@@ -1059,11 +1063,11 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
                             }
 
                             if webhook then
-                                BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                                ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
                                     "🛒 New Item Added to Shop", nil, message)
                             end
 
-                            BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
                                 "🛒 New Item Added to Shop", nil, message)
 
                             cb(true)
@@ -1086,7 +1090,8 @@ BccUtils.RPC:Register("bcc-shops:AddBuyItem", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:AddWeaponItem", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:AddWeaponItem", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
     local weaponName = params.weaponName
     local weaponLabel = params.weaponLabel
@@ -1159,7 +1164,7 @@ BccUtils.RPC:Register("bcc-shops:AddWeaponItem", function(params, cb, src)
     end
 
     -- Remove weapon from inventory
-    exports.vorp_inventory:subWeapon(src, weaponId, function(success)
+    ShopsInventory:subWeapon(src, weaponId, function(success)
         if not success then
             devPrint("Failed to remove weapon from player inventory.")
             cb(false)
@@ -1167,11 +1172,11 @@ BccUtils.RPC:Register("bcc-shops:AddWeaponItem", function(params, cb, src)
         end
 
         -- Character info for logs
-        local user = VORPcore.getUser(src)
-        local Character = user and user.getUsedCharacter or {}
-        local charId = Character.charIdentifier or "unknown"
-        local firstName = Character.firstname or "unknown"
-        local lastName = Character.lastname or "unknown"
+        local user = ShopsCore.GetCharacterContext(src)
+        local Character = user and user.character or {}
+        local charId = Character.characterId or "unknown"
+        local firstName = Character.firstName or "unknown"
+        local lastName = Character.lastName or "unknown"
 
         -- Webhook embed
         local embed = {{
@@ -1189,15 +1194,16 @@ BccUtils.RPC:Register("bcc-shops:AddWeaponItem", function(params, cb, src)
         }}
 
         if webhook then
-            BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, "Shop Weapon Update", nil, embed)
+            ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, "Shop Weapon Update", nil, embed)
         end
-        BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Shop Weapon Update", nil, embed)
+        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Shop Weapon Update", nil, embed)
 
         cb(true)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:AddSellItem", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:AddSellItem", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopName = params.shopName
     local itemLabel = params.itemLabel
     local itemName = params.itemName
@@ -1230,12 +1236,12 @@ BccUtils.RPC:Register("bcc-shops:AddSellItem", function(params, cb, source)
     local shopId = shopResult[1].shop_id
     local webhook = shopResult[1].webhook_link
 
-    local user = VORPcore.getUser(source)
-    local character = user.getUsedCharacter
-    local charId = character.charIdentifier
-    local firstName = character.firstname
+    local user = ShopsCore.GetCharacterContext(source)
+    local character = user.character
+    local charId = character.characterId
+    local firstName = character.firstName
 
-    exports.vorp_inventory:getItem(source, itemName, function(playerItem)
+    ShopsInventory:getItem(source, itemName, function(playerItem)
         if playerItem then
             local hasDurability = playerItem.usages
                 or playerItem.durability
@@ -1281,11 +1287,11 @@ BccUtils.RPC:Register("bcc-shops:AddSellItem", function(params, cb, source)
                     }
 
                     if webhook then
-                        BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                        ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
                             "🛒 Item Updated in Shop", nil, message)
                     end
 
-                    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
                         "🛒 Item Updated in Shop", nil, message)
 
                     cb(true)
@@ -1323,11 +1329,11 @@ BccUtils.RPC:Register("bcc-shops:AddSellItem", function(params, cb, source)
                     }
 
                     if webhook then
-                        BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                        ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar,
                             "🛒 New Item Added to Shop", nil, message)
                     end
 
-                    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
+                    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar,
                         "🛒 New Item Added to Shop", nil, message)
 
                     cb(true)
@@ -1343,7 +1349,8 @@ BccUtils.RPC:Register("bcc-shops:AddSellItem", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:EditItemNPCShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:EditItemNPCShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName      = params.shopName
     local itemName      = params.itemName
     local itemLabel     = params.itemLabel
@@ -1395,7 +1402,8 @@ BccUtils.RPC:Register("bcc-shops:EditItemNPCShop", function(params, cb, src)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:EditItemNPCWeapon", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:EditItemNPCWeapon", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName      = params.shopName
     local weaponName    = params.weaponName
     local weaponLabel   = params.weaponLabel
@@ -1453,7 +1461,8 @@ BccUtils.RPC:Register("bcc-shops:EditItemNPCWeapon", function(params, cb, src)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:EditItemPlayerShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:EditItemPlayerShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName      = params.shopName
     local itemName      = params.itemName
     local itemLabel     = params.itemLabel
@@ -1515,7 +1524,8 @@ BccUtils.RPC:Register("bcc-shops:EditItemPlayerShop", function(params, cb, src)
 end)
 
 -- Edit ITEM in a player shop (no buy_quantity updates)
-BccUtils.RPC:Register("bcc-shops:EditItemPlayerShop", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:EditItemPlayerShop", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName      = params.shopName
     local itemName      = params.itemName
     local itemLabel     = params.itemLabel
@@ -1576,7 +1586,8 @@ BccUtils.RPC:Register("bcc-shops:EditItemPlayerShop", function(params, cb, src)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:RemoveShopItem", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:RemoveShopItem", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopName = params.shopName
     local itemName = params.itemName
     local quantity = params.quantity
@@ -1586,7 +1597,7 @@ BccUtils.RPC:Register("bcc-shops:RemoveShopItem", function(params, cb, source)
         source ..
         ": shop=" .. shopName .. ", item=" .. itemName .. ", quantity=" .. quantity .. ", isBuy=" .. tostring(isBuy))
 
-    local user = VORPcore.getUser(source)
+    local user = ShopsCore.GetCharacterContext(source)
     if not user then
         devPrint("[RemoveShopItem] Invalid user")
         NotifyClient(source, "Invalid user.", "error")
@@ -1627,7 +1638,7 @@ BccUtils.RPC:Register("bcc-shops:RemoveShopItem", function(params, cb, source)
     -- Check canCarry BEFORE updating database
     if isBuy then
         devPrint("[RemoveShopItem] Checking if player can carry: " .. itemName .. " x" .. quantity)
-        local canCarry = exports.vorp_inventory:canCarryItem(source, itemName, quantity)
+        local canCarry = ShopsInventory:canCarryItem(source, itemName, quantity)
         if not canCarry then
             devPrint("[RemoveShopItem] Cannot carry item: " .. itemName)
             NotifyClient(source, _U('StackFull') .. ": " .. itemName, "warning")
@@ -1646,7 +1657,7 @@ BccUtils.RPC:Register("bcc-shops:RemoveShopItem", function(params, cb, source)
         devPrint("[RemoveShopItem] Updated quantity in DB")
 
         if isBuy then
-            exports.vorp_inventory:addItem(source, itemName, quantity)
+            ShopsInventory:addItem(source, itemName, quantity)
             devPrint("[RemoveShopItem] Item added to inventory: " .. itemName .. " x" .. quantity)
         end
 
@@ -1657,7 +1668,8 @@ BccUtils.RPC:Register("bcc-shops:RemoveShopItem", function(params, cb, source)
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:CleanupEmptyItems", function(_, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:CleanupEmptyItems", function(_, cb, source)
+    local _U = ShopTranslator(source)
     local deleted = MySQL.update.await(
         [[DELETE FROM bcc_shop_items
           WHERE buy_quantity = 0 AND sell_quantity = 0]])

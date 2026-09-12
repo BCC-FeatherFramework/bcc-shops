@@ -183,7 +183,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                     }, function()
                         local amount = tonumber(addAmount)
                         if amount and amount > 0 then
-                            BccUtils.RPC:Call("bcc-shops:ModifyLedger", {
+                            exports['feather-core']:CallRPC("bcc-shops:ModifyLedger", {
                                 shopName = shopName,
                                 amount = amount,
                                 action = "add"
@@ -263,7 +263,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                     }, function()
                         local amount = tonumber(removeAmount)
                         if amount and amount > 0 then
-                            BccUtils.RPC:Call("bcc-shops:ModifyLedger", {
+                            exports['feather-core']:CallRPC("bcc-shops:ModifyLedger", {
                                 shopName = shopName,
                                 amount = amount,
                                 action = "remove"
@@ -351,7 +351,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                     devPrint("Opening GiveAccessMenu for shopId: " ..
                         tostring(shopId) .. ", shopName: " .. tostring(shopName))
 
-                    BccUtils.RPC:Call("bcc-shops:FetchOnlinePlayers", {}, function(players)
+                    exports['feather-core']:CallRPC("bcc-shops:FetchOnlinePlayers", {}, function(players)
                         if not players or #players == 0 then
                             Notify(_U("noOnlinePlayersFound"), "warning", 4000)
                             return
@@ -381,7 +381,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                             }, function()
                                 devPrint("Giving access to charId: " ..
                                     tostring(p.charId) .. " for shopId: " .. tostring(shopId))
-                                BccUtils.RPC:Call("bcc-shops:GiveAccess", {
+                                exports['feather-core']:CallRPC("bcc-shops:GiveAccess", {
                                     shopId = shopId,
                                     characterId = p.charId
                                 }, function(success)
@@ -427,7 +427,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                 }, function()
                     devPrint("[CLIENT] Requesting access list for shop: " .. shopName)
 
-                    BccUtils.RPC:Call("bcc-shops:GetAccessList", { shopName = shopName }, function(results)
+                    exports['feather-core']:CallRPC("bcc-shops:GetAccessList", { shopName = shopName }, function(results)
                         if not results or #results == 0 then
                             devPrint("[CLIENT] No players with access returned.")
                             Notify(_U("noPlayersWithAccess"), "warning", 4000)
@@ -446,11 +446,11 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                         for _, player in ipairs(results) do
                             local selectedCharacterId = player.character_id
                             devPrint("[CLIENT] Adding button for: " ..
-                                player.firstname .. " " .. player.lastname .. " (ID: " .. selectedCharacterId .. ")")
+                                player.firstName .. " " .. player.lastName .. " (ID: " .. selectedCharacterId .. ")")
 
                             accessListPage:RegisterElement("button", {
-                                label = player.firstname ..
-                                    " " .. player.lastname .. " (ID: " .. selectedCharacterId .. ")",
+                                label = player.firstName ..
+                                    " " .. player.lastName .. " (ID: " .. selectedCharacterId .. ")",
                                 slot = "content",
                                 style = {},
                                 sound = {
@@ -478,14 +478,14 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                                 }, function()
                                     devPrint("[CLIENT] Confirming removal. Fetching shop info for: " .. shopName)
 
-                                    BccUtils.RPC:Call("bcc-shops:fetchPlayerStoreInfo", { shopName = shopName },
+                                    exports['feather-core']:CallRPC("bcc-shops:fetchPlayerStoreInfo", { shopName = shopName },
                                         function(shop)
                                             if shop then
                                                 devPrint("[CLIENT] Shop info found: ID = " ..
                                                     tostring(shop.shopId) ..
                                                     ". Sending removal request for character ID: " .. selectedCharacterId)
 
-                                                BccUtils.RPC:Call("bcc-shops:RemoveAccess", {
+                                                exports['feather-core']:CallRPC("bcc-shops:RemoveAccess", {
                                                     shopId = shop.shopId,
                                                     characterId = selectedCharacterId
                                                 }, function(success)
@@ -623,7 +623,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                         return
                     end
 
-                    BccUtils.RPC:Call("bcc-shops:SetWebhook", {
+                    exports['feather-core']:CallRPC("bcc-shops:SetWebhook", {
                         shopId = shopId,
                         webhook = webhookValue
                     }, function(success)
@@ -700,7 +700,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                             soundset = "RDRO_Character_Creator_Sounds"
                         }
                     }, function()
-                        BccUtils.RPC:Call("bcc-shops:SetShopBlipEnabled", {
+                        exports['feather-core']:CallRPC("bcc-shops:SetShopBlipEnabled", {
                             shopName = shopName,
                             enabled = true
                         }, function(success)
@@ -718,7 +718,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                                 local shop = GetShopByName(shopName)
                                 if shop then
                                     local hash = tonumber(shop.blip_hash) or 1475879922
-                                    local newBlip = BccUtils.Blips:SetBlip(shop.shop_name, hash, 1, shop.pos_x,
+                                    local newBlip = ShopsToolkit.Blips:SetBlip(shop.shop_name, hash, 1, shop.pos_x,
                                         shop.pos_y, shop.pos_z)
                                     newBlip.name = shop.shop_name
                                     table.insert(CreatedBlip, newBlip)
@@ -738,7 +738,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                             soundset = "RDRO_Character_Creator_Sounds"
                         }
                     }, function()
-                        BccUtils.RPC:Call("bcc-shops:SetShopBlipEnabled", {
+                        exports['feather-core']:CallRPC("bcc-shops:SetShopBlipEnabled", {
                             shopName = shopName,
                             enabled = false
                         }, function(success)
@@ -819,7 +819,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                             selectedBlipHash = blip.blipHash
                             devPrint("Selected Blip: " .. blip.label)
 
-                            BccUtils.RPC:Call("bcc-shops:SetPlayerShopBlip", {
+                            exports['feather-core']:CallRPC("bcc-shops:SetPlayerShopBlip", {
                                 shopName = shopName,
                                 blipHash = selectedBlipHash
                             }, function(success)
@@ -838,7 +838,7 @@ function OpenPlayerStoreMenu(shopId, shopName, invLimit, ledger, isOwner, hasAcc
                                     -- 🔁 Add new blip with updated hash
                                     local shop = GetShopByName(shopName) -- Make sure this exists
                                     if shop then
-                                        local newBlip = BccUtils.Blips:SetBlip(shop.shop_name, selectedBlipHash, 1,
+                                        local newBlip = ShopsToolkit.Blips:SetBlip(shop.shop_name, selectedBlipHash, 1,
                                             shop.pos_x, shop.pos_y, shop.pos_z)
                                         newBlip.name = shop.shop_name
                                         table.insert(CreatedBlip, newBlip)
@@ -1041,7 +1041,7 @@ function OpenCreatePlayerStoreMenu(players, storeDetails)
             storeDetails.shopName = shopName
             if storeDetails.pos_x and storeDetails.pos_y and storeDetails.pos_z then
                 devPrint("Creating store with details: " .. json.encode(storeDetails))
-                BccUtils.RPC:Call("bcc-shops:createplayershop", storeDetails, function(success)
+                exports['feather-core']:CallRPC("bcc-shops:createplayershop", storeDetails, function(success)
                     if success then
                         BCCShopsMainMenu:Close()
                         Notify(_U('shopCreatedSuccess'), "success", 4000)
@@ -1206,7 +1206,7 @@ function OpenPlayerInventoryMenu(shopName, inventory, weapons)
         local itemName    = (item.item_name or "unknown_item")
         local label       = item.label or _U('unknown')
         local count       = item.count or 0
-        local imgPath     = 'nui://vorp_inventory/html/img/items/' .. itemName .. '.png'
+        local imgPath     = 'nui://feather-inventory/ui/images/items/' .. itemName .. '.png'
 
         idx               = idx + 1
         combinedRows[idx] = {
@@ -1237,7 +1237,7 @@ function OpenPlayerInventoryMenu(shopName, inventory, weapons)
         local itemName    = (weapon.name or "unknown_weapon")
         local label       = weapon.custom_label or weapon.label or _U('unknown')
         local serial      = weapon.serial_number or "N/A"
-        local imgPath     = 'nui://vorp_inventory/html/img/items/' .. itemName .. '.png'
+        local imgPath     = 'nui://feather-inventory/ui/images/items/' .. itemName .. '.png'
 
         idx               = idx + 1
         combinedRows[idx] = {
@@ -1328,7 +1328,7 @@ function OpenAddPlayerItemDetailMenuWithDetails(shopName, item, actionType)
     devPrint("Opening item detail menu for item: " ..
         (item.label or "Unknown Item") .. ", Action: " .. tostring(actionType))
 
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetShopCategories")
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetShopCategories")
     local categoryOptions = {}
     if categories and #categories > 0 then
         for _, cat in ipairs(categories) do
@@ -1477,7 +1477,7 @@ end
             }
 
             devPrint("Sending weapon to shop: " .. json.encode(weaponPayload))
-            BccUtils.RPC:Call("bcc-shops:AddWeaponItem", weaponPayload, function(success, msg)
+            exports['feather-core']:CallRPC("bcc-shops:AddWeaponItem", weaponPayload, function(success, msg)
                 if success then
                     Notify(_U("weaponAddedSuccess"), "success", 4000)
                     BCCShopsMainMenu:Close()
@@ -1500,7 +1500,7 @@ end
         if actionType == 'buy' then
             payload.buyPrice = inputPrice
             devPrint("Adding buy item: " .. json.encode(payload))
-            BccUtils.RPC:Call("bcc-shops:AddBuyItem", payload, function(success)
+            exports['feather-core']:CallRPC("bcc-shops:AddBuyItem", payload, function(success)
                 if success then
                     Notify(_U("itemAddedSuccess"), "success", 4000)
                     BCCShopsMainMenu:Close()
@@ -1511,7 +1511,7 @@ end
         else
             payload.sellPrice = inputPrice
             devPrint("Adding sell item: " .. json.encode(payload))
-            BccUtils.RPC:Call("bcc-shops:AddSellItem", payload, function(success)
+            exports['feather-core']:CallRPC("bcc-shops:AddSellItem", payload, function(success)
                 if success then
                     Notify(_U("itemAddedSuccess"), "success", 4000)
                     BCCShopsMainMenu:Close()
@@ -1538,7 +1538,7 @@ end
 function OpenRemovePlayerItemMenu(shopName)
     devPrint("Fetching shop items for: " .. shopName)
 
-    local result = BccUtils.RPC:CallAsync("bcc-shops:FetchShopItems", { shopName = shopName })
+    local result = exports['feather-core']:CallRPCAsync("bcc-shops:FetchShopItems", { shopName = shopName })
     if not result or (not result.items and not result.weapons) then
         Notify(_U("failedToFetchShopItems"), "error", 4000)
         return
@@ -1602,7 +1602,7 @@ function OpenRemovePlayerItemMenu(shopName)
         for _, entry in ipairs(entries) do
             local itemName = entry.name or entry.item_name or entry.weapon_name or "unknown_item"
             local label = entry.label or entry.item_label or entry.weapon_label or _U("unknownItem")
-            local imgPath = "nui://vorp_inventory/html/img/items/" .. itemName .. ".png"
+            local imgPath = "nui://feather-inventory/ui/images/items/" .. itemName .. ".png"
             local icon = type == "weapon" and '<span style="font-size: 0.7vw; opacity: 0.5;">🔫</span>' or ""
 
             local html = string.format([[
@@ -1675,7 +1675,7 @@ end
 function RequestRemoveQuantity(shopName, itemName, maxBuyQuantity, maxSellQuantity, buyPrice, sellPrice)
     local inputPage = BCCShopsMainMenu:RegisterPage('bcc-shops:remove:quantity')
     local quantity = 1
-    local imgPath = 'nui://vorp_inventory/html/img/items/' .. itemName .. '.png'
+    local imgPath = 'nui://feather-inventory/ui/images/items/' .. itemName .. '.png'
 
     local html =
         '<div style="padding: 10px; font-size: 0.95vw;">' ..
@@ -1732,7 +1732,7 @@ function RequestRemoveQuantity(shopName, itemName, maxBuyQuantity, maxSellQuanti
         }
     }, function()
         if quantity <= maxBuyQuantity then
-            BccUtils.RPC:Call("bcc-shops:RemoveShopItem", {
+            exports['feather-core']:CallRPC("bcc-shops:RemoveShopItem", {
                 shopName = shopName,
                 itemName = itemName,
                 quantity = quantity,
@@ -1761,7 +1761,7 @@ function RequestRemoveQuantity(shopName, itemName, maxBuyQuantity, maxSellQuanti
         }
     }, function()
         if quantity <= maxSellQuantity then
-            BccUtils.RPC:Call("bcc-shops:RemoveShopItem", {
+            exports['feather-core']:CallRPC("bcc-shops:RemoveShopItem", {
                 shopName = shopName,
                 itemName = itemName,
                 quantity = quantity,
@@ -1843,7 +1843,7 @@ function OpenAddItemMenu(shopName, item, inventoryType)
     }, function()
         if inventoryType == "buy" then
             devPrint("Triggering addBuyItem with itemName: " .. tostring(item.item_name))
-            BccUtils.RPC:Call("bcc-shops:AddBuyItem", {
+            exports['feather-core']:CallRPC("bcc-shops:AddBuyItem", {
                 shopName = shopName,
                 itemLabel = item.label,
                 itemName = item.item_name,
@@ -1861,7 +1861,7 @@ function OpenAddItemMenu(shopName, item, inventoryType)
             end)
         else
             devPrint("Triggering addSellItem with itemName: " .. tostring(item.item_name))
-            BccUtils.RPC:Call("bcc-shops:AddSellItem", {
+            exports['feather-core']:CallRPC("bcc-shops:AddSellItem", {
                 shopName = shopName,
                 itemLabel = item.label,
                 itemName = item.item_name,

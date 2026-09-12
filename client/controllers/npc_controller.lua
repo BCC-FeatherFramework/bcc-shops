@@ -4,7 +4,7 @@ local npcLoopStarted = false
 -- 🔁 Cache player stores when the resource starts
 CreateThread(function()
     devPrint("📡 Fetching all player-owned shops to cache...")
-    local result = BccUtils.RPC:CallAsync("bcc-shops:GetAllPlayerShops", {})
+    local result = exports['feather-core']:CallRPCAsync("bcc-shops:GetAllPlayerShops", {})
     if result and #result > 0 then
         playerStores = result
         devPrint("Cached " .. #playerStores .. " player-owned shops.")
@@ -19,7 +19,7 @@ if Config.devMode then
     CreateThread(function()
         Wait(3000)
         devPrint("🚀 Requesting to start NPC purchase loop from client (dev mode)...")
-        local started = BccUtils.RPC:CallAsync("bcc-shops:StartNpcPurchases", {})
+        local started = exports['feather-core']:CallRPCAsync("bcc-shops:StartNpcPurchases", {})
         if started then
             devPrint("NPC purchase loop approved. Starting loop (dev mode).")
             StartNpcPurchaseLoop()
@@ -61,7 +61,7 @@ function StartNpcPurchaseLoop()
 
             -- Fetch shop items
             devPrint("Fetching items for shop: " .. shop.shop_name)
-            local result = BccUtils.RPC:CallAsync("bcc-shops:FetchShopItems", { shopName = shop.shop_name })
+            local result = exports['feather-core']:CallRPCAsync("bcc-shops:FetchShopItems", { shopName = shop.shop_name })
             if not result or not result.items then
                 devPrint("Failed to fetch items for shop: " .. shop.shop_name)
                 goto continue

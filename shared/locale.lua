@@ -1,40 +1,44 @@
-Locales = {}
+-- Feather Core owns locale registration and account locale preferences.
+Feather = Feather or {}
+Feather.Locale = Feather.Locale or {}
+local fallbackTranslations
+local namespace = 'bcc-shops.'
 
-local translationCache = {} -- Cache for translations
-
-function _(str, ...) -- Translate string
-    -- Check cache first
-    if translationCache[str] then
-        return string.format(translationCache[str], ...)
+function Feather.Locale.register(locale, translations)
+    local registered = {}
+    for key, value in pairs(translations) do
+        registered[namespace .. key] = value
     end
+    local result = exports['feather-core']:RegisterLocale(locale, registered)
+    if type(result) ~= 'table' or result.ok ~= true then
+        error('Shop locale registration failed: ' .. tostring(locale))
+    end
+    if locale == Config.defaultlang then fallbackTranslations = translations end
+end
 
-    local lang = Config.defaultlang
-    local defaultLang = "en_lang" -- Set your fallback language here (e.g., 'en')
+function TranslateShopLocale(actorSource, key, ...)
+    local result = exports['feather-core']:TranslateLocale(actorSource or 0, namespace .. key, ...)
+    if type(result) == 'table' and result.ok == true and type(result.value) == 'string'
+        and not result.value:match('^Translation %[') and not result.value:match('^Locale %[') then
+        return result.value
+    end
+    local fallback = fallbackTranslations and fallbackTranslations[key]
+    if fallback then return string.format(fallback, ...) end
+    return 'Missing shop translation: ' .. tostring(key)
+end
 
-    if Locales[lang] ~= nil then
-        if Locales[lang][str] ~= nil then
-            translationCache[str] = Locales[lang][str] -- Cache the translation for faster future access
-            if ... then
-                return string.format(Locales[lang][str], ...)
-            else
-                return Locales[lang][str]
-            end
-        elseif Locales[defaultLang] ~= nil and Locales[defaultLang][str] ~= nil then
-            if ... then
-                return string.format(Locales[defaultLang][str], ...)
-            else
-                return Locales[defaultLang][str]
-            end
-        else
-            return 'Translation [' .. lang .. '][' .. str .. '] and fallback [' .. defaultLang .. '] do not exist'
-        end
-    else
-        return 'Locale [' .. lang .. '] does not exist'
+function _(key, ...)
+    return TranslateShopLocale(IsDuplicityVersion() and tonumber(source) or 0, key, ...)
+end
+
+function ShopTranslator(actorSource)
+    return function(key, ...)
+        local translation = TranslateShopLocale(actorSource, key, ...)
+        return translation:sub(1, 1):upper() .. translation:sub(2)
     end
 end
 
-function _U(str, ...) -- Translate string first char uppercase
-    -- Use cached translation if available
-    local translation = _(str, ...)
+function _U(key, ...)
+    local translation = _(key, ...)
     return translation:sub(1, 1):upper() .. translation:sub(2)
 end

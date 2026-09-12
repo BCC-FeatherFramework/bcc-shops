@@ -1,4 +1,5 @@
-BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:GiveAccess", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopId = params.shopId
     local characterId = tostring(params.characterId)
 
@@ -41,14 +42,14 @@ BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
     local shopName = shopInfo.shop_name or "Unknown"
 
     -- Fetch character name from DB
-    local charResult = MySQL.query.await('SELECT firstname, lastname FROM characters WHERE charidentifier = ?',
+    local charResult = MySQL.query.await('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
         { characterId })
     local character = charResult and charResult[1] or { firstname = "Unknown", lastname = "Unknown" }
 
     -- Send to shop-specific webhook
     if webhook then
         devPrint("Sending to shop-specific webhook: " .. webhook)
-        BccUtils.Discord.sendMessage(webhook,
+        ShopsToolkit.Discord.sendMessage(webhook,
             Config.WebhookTitle,
             Config.WebhookAvatar,
             "🔐 Access Granted",
@@ -59,7 +60,7 @@ BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
                     title = "🔓 New Access Granted",
                     description = table.concat({
                         "**Character ID:** `" .. characterId .. "`",
-                        "**Character Name:** `" .. character.firstname .. " " .. character.lastname .. "`",
+                        "**Character Name:** `" .. character.firstName .. " " .. character.lastName .. "`",
                         "**Shop Name:** `" .. shopName .. "`",
                         "**Shop ID:** `" .. shopId .. "`"
                     }, "\n")
@@ -70,7 +71,7 @@ BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
 
     -- Also send to global webhook
     devPrint("Sending to global webhook: " .. Config.Webhook)
-    BccUtils.Discord.sendMessage(
+    ShopsToolkit.Discord.sendMessage(
         Config.Webhook,
         Config.WebhookTitle,
         Config.WebhookAvatar,
@@ -82,7 +83,7 @@ BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
                 title = "🔓 New Access Granted",
                 description = table.concat({
                     "**Character ID:** `" .. characterId .. "`",
-                    "**Character Name:** `" .. character.firstname .. " " .. character.lastname .. "`",
+                    "**Character Name:** `" .. character.firstName .. " " .. character.lastName .. "`",
                     "**Shop Name:** `" .. shopName .. "`",
                     "**Shop ID:** `" .. shopId .. "`"
                 }, "\n")
@@ -93,7 +94,8 @@ BccUtils.RPC:Register("bcc-shops:GiveAccess", function(params, cb, source)
     cb(success)
 end)
 
-BccUtils.RPC:Register("bcc-shops:RemoveAccess", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:RemoveAccess", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopId = params.shopId
     local characterId = tostring(params.characterId)
 
@@ -103,14 +105,14 @@ BccUtils.RPC:Register("bcc-shops:RemoveAccess", function(params, cb, source)
     end
 
     -- Get character info directly from DB (in case they're offline)
-    local charResult = MySQL.query.await('SELECT firstname, lastname FROM characters WHERE charidentifier = ?',
+    local charResult = MySQL.query.await('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
         { characterId })
     local firstname = "Unknown"
     local lastname = ""
 
     if charResult and charResult[1] then
-        firstname = charResult[1].firstname
-        lastname = charResult[1].lastname
+        firstname = charResult[1].firstName
+        lastname = charResult[1].lastName
     else
         devPrint("Character not found for ID: " .. characterId)
     end
@@ -152,13 +154,13 @@ BccUtils.RPC:Register("bcc-shops:RemoveAccess", function(params, cb, source)
         -- Shop webhook
         if webhook then
             devPrint("Sending to shop-specific webhook: " .. webhook)
-            BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, "Access Removed", nil,
+            ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, "Access Removed", nil,
                 embed)
         end
 
         -- Global webhook
         devPrint("Sending to global webhook: " .. Config.Webhook)
-        BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Access Removed", nil,
+        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Access Removed", nil,
             embed)
     else
         devPrint(" No access entry removed.")
@@ -167,7 +169,8 @@ BccUtils.RPC:Register("bcc-shops:RemoveAccess", function(params, cb, source)
     cb(success)
 end)
 
-BccUtils.RPC:Register("bcc-shops:HasAccess", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:HasAccess", function(params, cb, source)
+    local _U = ShopTranslator(source)
     local shopId = params.shopId
     local characterId = tostring(params.characterId)
 
@@ -180,19 +183,20 @@ BccUtils.RPC:Register("bcc-shops:HasAccess", function(params, cb, source)
     end)
 end)
 
-BccUtils.RPC:Register("bcc-shops:CheckStoreOwnership", function(params, cb, source)
+exports['feather-core']:RegisterRPC("bcc-shops:CheckStoreOwnership", function(params, cb, source)
+    local _U = ShopTranslator(source)
     if not params or not params.storeName then
         devPrint("Error: storeName is nil")
         return cb({ isOwner = false, hasAccess = false, storeName = params and params.storeName or "unknown" })
     end
 
-    local user = VORPcore.getUser(source)
+    local user = ShopsCore.GetCharacterContext(source)
     if not user then return cb({ isOwner = false, hasAccess = false, storeName = params.storeName }) end
 
-    local character = user.getUsedCharacter
+    local character = user.character
     if not character then return cb({ isOwner = false, hasAccess = false, storeName = params.storeName }) end
 
-    local characterId = character.charIdentifier
+    local characterId = character.characterId
     local storeName = params.storeName
 
     devPrint("Checking ownership for store: " .. storeName .. ", Character ID: " .. tostring(characterId))
@@ -233,32 +237,7 @@ BccUtils.RPC:Register("bcc-shops:CheckStoreOwnership", function(params, cb, sour
 end)
 
 
-BccUtils.RPC:Register("bcc-shops:CheckAdmin", function(_, cb, src)
-    local user = VORPcore.getUser(src)
-    if not user then
-        devPrint("[ERROR] User not found for source: " .. tostring(src))
-        return cb(false)
-    end
-
-    local character = user.getUsedCharacter
-    if not character then
-        devPrint("[ERROR] Character not found for user: " .. tostring(src))
-        return cb(false)
-    end
-
-    -- Check group
-    for _, group in ipairs(Config.adminGroups or {}) do
-        if character.group == group then
-            return cb(true)
-        end
-    end
-
-    -- Check job
-    for _, job in ipairs(Config.AllowedJobs or {}) do
-        if character.job == job then
-            return cb(true)
-        end
-    end
-
-    return cb(false)
+exports['feather-core']:RegisterRPC("bcc-shops:CheckAdmin", function(_, cb, src)
+    local _U = ShopTranslator(src)
+    cb(CanManageShops(src))
 end)

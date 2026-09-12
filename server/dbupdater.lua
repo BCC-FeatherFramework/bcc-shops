@@ -3,7 +3,7 @@ CreateThread(function()
     MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS bcc_shops (
             shop_id INT(11) NOT NULL AUTO_INCREMENT,
-            owner_id INT(30) DEFAULT NULL,
+            owner_id VARCHAR(36) DEFAULT NULL,
             shop_name VARCHAR(255) NOT NULL,
             shop_location VARCHAR(255) NOT NULL,
             shop_type VARCHAR(20) NOT NULL,
@@ -25,6 +25,8 @@ CreateThread(function()
         ALTER TABLE bcc_shops
         ADD COLUMN IF NOT EXISTS show_blip TINYINT(1) NOT NULL DEFAULT 1 AFTER blip_hash;
     ]])
+
+    MySQL.query.await('ALTER TABLE bcc_shops MODIFY owner_id VARCHAR(36) DEFAULT NULL')
 
     -- bcc_shop_access
     MySQL.query.await([[

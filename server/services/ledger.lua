@@ -1,4 +1,5 @@
-BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
+exports['feather-core']:RegisterRPC("bcc-shops:ModifyLedger", function(params, cb, src)
+    local _U = ShopTranslator(src)
     local shopName = params.shopName
     local amount = tonumber(params.amount)
     local action = params.action -- "add" or "remove"
@@ -8,15 +9,15 @@ BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
         return cb(false)
     end
 
-    local user = VORPcore.getUser(src)
-    local character = user and user.getUsedCharacter
+    local user = ShopsCore.GetCharacterContext(src)
+    local character = user and user.character
     if not character then
         devPrint("Character not found for source: " .. tostring(src))
         return cb(false)
     end
 
-    local charId = character.charIdentifier
-    local firstname, lastname = character.firstname, character.lastname
+    local charId = character.characterId
+    local firstname, lastname = character.firstName, character.lastName
 
     local result = MySQL.query.await([[
         SELECT shop_id, ledger, webhook_link
@@ -40,7 +41,7 @@ BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
             return cb(false)
         end
 
-        character.removeCurrency(0, amount)
+        character.DebitWallet(0, amount)
         currentLedger = currentLedger + amount
 
     elseif action == "remove" then
@@ -50,7 +51,7 @@ BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
             return cb(false)
         end
 
-        character.addCurrency(0, amount)
+        character.CreditWallet(0, amount)
         currentLedger = currentLedger - amount
     end
 
@@ -80,7 +81,7 @@ BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
 
     -- Send to shop-specific webhook if available
     if shop.webhook_link then
-        BccUtils.Discord.sendMessage(shop.webhook_link,
+        ShopsToolkit.Discord.sendMessage(shop.webhook_link,
             Config.WebhookTitle,
             Config.WebhookAvatar,
             "💰 Ledger Modified",
@@ -90,7 +91,7 @@ BccUtils.RPC:Register("bcc-shops:ModifyLedger", function(params, cb, src)
     end
 
     -- Always send to global webhook
-    BccUtils.Discord.sendMessage(Config.Webhook,
+    ShopsToolkit.Discord.sendMessage(Config.Webhook,
         Config.WebhookTitle,
         Config.WebhookAvatar,
         "💰 Ledger Modified",

@@ -1,5 +1,5 @@
 function BuyMenu(shopName, returnPage)
-    BccUtils.RPC:Call("bcc-shops:GetShopItems", {
+    exports['feather-core']:CallRPC("bcc-shops:GetShopItems", {
         shopName = shopName
     }, function(data)
         if (not data.items or next(data.items) == nil) and (not data.weapons or next(data.weapons) == nil) then
@@ -57,7 +57,7 @@ function BuyMenu(shopName, returnPage)
         local imageBoxItems = {}
         for index, item in ipairs(entries) do
             local imgName = item.name
-            local imgPath = "nui://vorp_inventory/html/img/items/" .. imgName .. ".png"
+            local imgPath = "nui://feather-inventory/ui/images/items/" .. imgName .. ".png"
             local isUnavailable = not item.price or item.price <= 0
 
             table.insert(imageBoxItems, {
@@ -132,7 +132,7 @@ function BuyMenu(shopName, returnPage)
 end
 
 function RequestBuyQuantity(item, shopName, isWeapon, returnPage)
-    local level = BccUtils.RPC:CallAsync("bcc-shops:GetPlayerLevel", {})
+    local level = exports['feather-core']:CallRPCAsync("bcc-shops:GetPlayerLevel", {})
 
     playerLevel = level
 
@@ -146,7 +146,7 @@ function RequestBuyQuantity(item, shopName, isWeapon, returnPage)
     local inputPage = BCCShopsMainMenu:RegisterPage('entry:quantity')
     local quantity = 1
 
-    local imgPath = "nui://vorp_inventory/html/img/items/" .. item.item_name .. ".png"
+    local imgPath = "nui://feather-inventory/ui/images/items/" .. item.item_name .. ".png"
     local html = [[
     <div style="margin: auto; padding: 20px 30px;">
         <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px;">
@@ -249,7 +249,7 @@ function ProcessPurchase(shopName, item, quantity, isWeapon)
 
         if isWeapon then
             devPrint("Item is a weapon, calling PurchaseWeapon RPC.")
-            BccUtils.RPC:Call("bcc-shops:PurchaseWeapon", {
+            exports['feather-core']:CallRPC("bcc-shops:PurchaseWeapon", {
                 shopName = shopName,
                 weaponName = item.item_name,
                 quantity = quantity,
@@ -263,7 +263,7 @@ function ProcessPurchase(shopName, item, quantity, isWeapon)
             end)
         else
             devPrint("Item is not a weapon, calling PurchaseItem RPC.")
-            BccUtils.RPC:Call("bcc-shops:PurchaseItem", {
+            exports['feather-core']:CallRPC("bcc-shops:PurchaseItem", {
                 shopName = shopName,
                 itemName = item.item_name,
                 quantity = quantity,
@@ -321,7 +321,7 @@ function ProcessPurchaseNpc(shopName, item, quantity, isWeapon)
 
         devPrint("Calling RPC: " .. rpcName .. " with payload: " .. json.encode(payload))
 
-        BccUtils.RPC:Call(rpcName, payload, function(success)
+        exports['feather-core']:CallRPC(rpcName, payload, function(success)
             if success then
                 devPrint("Purchase successful for: " .. itemName)
             else

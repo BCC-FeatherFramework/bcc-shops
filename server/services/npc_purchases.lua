@@ -76,9 +76,9 @@ local function sendWebhook(shopId, shopName, label, name, qty, total, isWeapon)
     }
 
     if webhook and webhook ~= "none" then
-        BccUtils.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
+        ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
     end
-    BccUtils.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
+    ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, title, nil, embed)
 end
 
 local function performNpcPurchase(shopId, shopName, item)

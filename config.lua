@@ -1,16 +1,16 @@
 Config = {
-    defaultlang = "en_lang", -- Set Your Language (Current Languages: "en_lang" English, "ro_lang" Romanian)
+    defaultlang = "en_us", -- Fallback locale: en_us (English), ro (Romanian), pl (Polish).
     keys = {
         access = 0x760A9C6F, -- [G] Access Player menu
     },
     devMode = false,
+    ManagementRoles = { 'admin', 'owner', 'moderator' }, -- Feather character role keys.
+    DefaultPlayerXP = 0, -- Replace with your progression service when available.
     ManageShopsCommand = "manageStores", 
     Webhook = "",
     WebhookTitle = 'BCC-Shops',
     WebhookAvatar = '',
 
-    adminGroups = { 'admin', 'superadmin', 'moderator' },
-    AllowedJobs = { 'writer', 'storemanager' },
 
     DefaultNPCModel = "u_m_m_valgenstoreowner_01",
     DefaultBlipHash = "1475879922",
@@ -76,5 +76,5 @@ Config = {
             },
         }
     },
-    Notify = "feather-menu", ----or use vorp-core
+    Notify = "feather-notify",
 }

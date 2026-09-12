@@ -17,7 +17,7 @@ else
 end
 
 function NotifyClient(src, message, type, duration)
-    BccUtils.RPC:Notify("bcc-shop:NotifyClient", {
+    exports['feather-core']:NotifyRPC("bcc-shop:NotifyClient", {
         message = message,
         type = type or "info",
         duration = duration or 4000
@@ -29,7 +29,7 @@ function getLevelFromXP(xp)
 end
 
 function getPlayerXP(source)
-    return VORPcore.getUser(source).getUsedCharacter.xp
+    return ShopsCore.GetCharacterContext(source).character.xp
 end
 
 --[[function getSellPrice(type, name)

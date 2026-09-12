@@ -42,7 +42,7 @@ function OpenInitialManageMenu(stores, players)
                 soundset = "RDRO_Character_Creator_Sounds"
             }
         }, function()
-            BccUtils.RPC:Call("bcc-shops:FetchNPCShops", {}, function(npcShops)
+            exports['feather-core']:CallRPC("bcc-shops:FetchNPCShops", {}, function(npcShops)
                 if npcShops then
                     npcStores = npcShops
                     devPrint("✅ NPC shops refreshed: " .. #npcShops)
@@ -107,7 +107,7 @@ function OpenInitialManageMenu(stores, players)
                 soundset = "RDRO_Character_Creator_Sounds"
             }
         }, function()
-            BccUtils.RPC:Call("bcc-shops:FetchPlayerShops", {}, function(playerShops)
+            exports['feather-core']:CallRPC("bcc-shops:FetchPlayerShops", {}, function(playerShops)
                 if playerShops then
                     playerStores = playerShops
                     devPrint("✅ Player shops refreshed: " .. #playerShops)
@@ -368,7 +368,7 @@ function OpenDeleteStoresMenu()
     }, function()
         currentAction = "deleteNPCStores"
         devPrint("Pressed NPC Stores button — sending RPC")
-        BccUtils.RPC:Call("bcc-shops:FetchNPCShops", {}, function(npcShops)
+        exports['feather-core']:CallRPC("bcc-shops:FetchNPCShops", {}, function(npcShops)
             if npcShops then
                 npcStores = npcShops
                 devPrint("NPC shops refreshed: " .. #npcShops)
@@ -391,7 +391,7 @@ function OpenDeleteStoresMenu()
     }, function()
         currentAction = "deletePlayerStores"
 
-        local playerShops = BccUtils.RPC:CallAsync("bcc-shops:FetchPlayerShops", {})
+        local playerShops = exports['feather-core']:CallRPCAsync("bcc-shops:FetchPlayerShops", {})
         if playerShops and #playerShops > 0 then
             playerStores = playerShops
             devPrint("Player shops refreshed: " .. tostring(#playerShops))
@@ -494,9 +494,9 @@ function OpenDeleteConfirmationMenu(storeId, shopName, storeType)
         }
     }, function()
         if storeType == "npc" then
-            BccUtils.RPC:Call("bcc-shops:deleteNPCShop", { shopId = storeId })
+            exports['feather-core']:CallRPC("bcc-shops:deleteNPCShop", { shopId = storeId })
         else
-            BccUtils.RPC:Call("bcc-shops:deletePlayerShop", { shopId = storeId })
+            exports['feather-core']:CallRPC("bcc-shops:deletePlayerShop", { shopId = storeId })
         end
         BCCShopsMainMenu:Close()
     end)
@@ -586,7 +586,7 @@ function OpenCreateCategoryMenu()
     }, function()
         if newName and newName:len() > 0 then
             local labelToSave = (newLabel and newLabel:match("%S")) and newLabel or newName
-            BccUtils.RPC:Call("bcc-shops:CreateCategory", { name = newName, label = labelToSave }, function(success)
+            exports['feather-core']:CallRPC("bcc-shops:CreateCategory", { name = newName, label = labelToSave }, function(success)
                 if success then
                     Notify(_U("categoryCreatedSuccess"), "success", 4000)
                     Pages.CategoryPage:RouteTo()
@@ -624,7 +624,7 @@ function OpenEditCategoryMenu()
         slot = "header"
     })
 
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetAllCategories", {})
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetAllCategories", {})
 
     for _, cat in ipairs(categories) do
         local displayLabel = (cat.label and cat.label ~= "" and cat.label) or cat.name or _U("unknownCategory")
@@ -675,7 +675,7 @@ function OpenEditCategoryMenu()
                     soundset = "RDRO_Character_Creator_Sounds"
                 }
             }, function()
-                BccUtils.RPC:Call("bcc-shops:EditCategory", {
+                exports['feather-core']:CallRPC("bcc-shops:EditCategory", {
                     id = cat.id,
                     name = newName,
                     label = (newLabel and newLabel:match("%S")) and newLabel or newName
@@ -776,7 +776,7 @@ function OpenEditNPCShopPage(shop)
         edits.shopId   = shop.shop_id
         edits.shop_type = shop.shop_type
 
-        BccUtils.RPC:Call("bcc-shops:EditShop", edits, function(success)
+        exports['feather-core']:CallRPC("bcc-shops:EditShop", edits, function(success)
             if success then
                 Notify(_U("itemUpdated"), "success", 4000)
                 Pages.npcListPage:RouteTo()
@@ -839,7 +839,7 @@ function OpenEditPlayerShopPage(shop)
         edits.shopId   = shop.shop_id
         edits.shop_type = shop.shop_type
 
-        BccUtils.RPC:Call("bcc-shops:EditShop", edits, function(success)
+        exports['feather-core']:CallRPC("bcc-shops:EditShop", edits, function(success)
             if success then
                 Notify(_U("itemUpdated"), "success", 4000)
                 Pages.playerListPage:RouteTo()
@@ -869,7 +869,7 @@ function OpenDeleteCategoryMenu()
         slot = "header"
     })
 
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetAllCategories", {})
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetAllCategories", {})
 
     for _, cat in ipairs(categories) do
         deleteCatPage:RegisterElement('button', {
@@ -896,7 +896,7 @@ function OpenDeleteCategoryMenu()
                     soundset = "RDRO_Character_Creator_Sounds"
                 }
             }, function()
-                BccUtils.RPC:Call("bcc-shops:DeleteCategory", { id = cat.id }, function(success)
+                exports['feather-core']:CallRPC("bcc-shops:DeleteCategory", { id = cat.id }, function(success)
                     if success then
                         Notify(_U("categoryDeletedSuccess"), "success", 4000)
                         deleteCatPage:RouteTo()

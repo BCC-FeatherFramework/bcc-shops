@@ -1,4 +1,4 @@
-Locales["ro_lang"] = {
+Feather.Locale.register('ro', {
     PromptName                      = 'Deschide Meniul',
     BlipName                        = 'Pravalie',
 
@@ -286,4 +286,4 @@ Locales["ro_lang"] = {
     price_limit_exceeded            = "Pretul introdus depaseste limita maxima permisa.",
     maxSellPrice                    = "Pretul maxim de vanzare",
     maxBuyPrice                     = "Pretul maxim de cumparare"
-}
+})

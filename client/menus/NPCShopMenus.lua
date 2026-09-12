@@ -83,7 +83,7 @@ end
 function OpenNPCAddFromPlayerInventory(shopName)
     devPrint(("NPC AddFromPlayerInventory for shop: %s"):format(tostring(shopName)))
 
-    local result = BccUtils.RPC:CallAsync("bcc-shops:fetchPlayerInventory", { shopName = shopName })
+    local result = exports['feather-core']:CallRPCAsync("bcc-shops:fetchPlayerInventory", { shopName = shopName })
     if not result then
         devPrint("[ERROR] fetchPlayerInventory returned nil")
         return
@@ -110,7 +110,7 @@ function OpenNPCAddFromPlayerInventory(shopName)
         local itemName                    = (item.item_name or "unknown_item")
         local label                       = item.label or item.item_label or _U('unknown')
         local count                       = tonumber(item.count or item.item_quantity or 0) or 0
-        local imgPath                     = 'nui://vorp_inventory/html/img/items/' .. itemName .. '.png'
+        local imgPath                     = 'nui://feather-inventory/ui/images/items/' .. itemName .. '.png'
 
         -- normalize fields used by the detail page
         item.is_weapon                    = 0
@@ -150,7 +150,7 @@ function OpenNPCAddFromPlayerInventory(shopName)
         local wLabel                      = weapon.custom_label or weapon.label or weapon.weapon_label or _U('unknown')
         local wSerial                     = weapon.serial_number or weapon.serial or "N/A"
         local wId                         = weapon.weaponId or weapon.weapon_id or weapon.id
-        local imgPath                     = 'nui://vorp_inventory/html/img/items/' .. wName .. '.png'
+        local imgPath                     = 'nui://feather-inventory/ui/images/items/' .. wName .. '.png'
 
         weapon.is_weapon                  = 1
         weapon.item_name                  = wName
@@ -238,7 +238,7 @@ function OpenNPCAddDetailMenu(shopName, entry)
     })
 
     -- categories
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetShopCategories")
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetShopCategories")
     local categoryOptions, selectedCategoryId = {}, nil
     if categories and #categories > 0 then
         for _, cat in ipairs(categories) do
@@ -386,7 +386,7 @@ function OpenNPCAddDetailMenu(shopName, entry)
             }
 
             devPrint("[NPC Add Weapon] " .. json.encode(payload))
-            BccUtils.RPC:Call("bcc-shops:AddWeaponItem", payload, function(success, err)
+            exports['feather-core']:CallRPC("bcc-shops:AddWeaponItem", payload, function(success, err)
                 if success then
                     Notify(_U('weaponAddedSuccess') or "Weapon added to shop", "success", 4000)
                     BCCShopsMainMenu:Close()
@@ -410,7 +410,7 @@ function OpenNPCAddDetailMenu(shopName, entry)
             }
 
             devPrint("[NPC Add Item] " .. json.encode(payload))
-            BccUtils.RPC:Call("bcc-shops:AddItemNPCShop", payload, function(success, err)
+            exports['feather-core']:CallRPC("bcc-shops:AddItemNPCShop", payload, function(success, err)
                 if success then
                     Notify(_U('itemAddedSuccess') or "Item added to shop", "success", 4000)
                     BCCShopsMainMenu:Close()
@@ -453,7 +453,7 @@ function OpenAddNPCItemMenuInternal(shopName)
     local selectedCategoryId, itemLevel = nil, 0
 
     -- Fetch categories from server
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetShopCategories")
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetShopCategories")
     local categoryOptions = {}
 
     if categories and #categories > 0 then
@@ -554,7 +554,7 @@ function OpenAddNPCItemMenuInternal(shopName)
         end
 
         if itemName ~= "" and itemLabel ~= "" and itemBuyPrice > 0 then
-            BccUtils.RPC:Call("bcc-shops:AddItemNPCShop", {
+            exports['feather-core']:CallRPC("bcc-shops:AddItemNPCShop", {
                 shopName      = shopName,
                 itemLabel     = itemLabel,
                 itemName      = itemName,
@@ -602,7 +602,7 @@ end
 function OpenEditNPCShopMenu(shopName)
     devPrint(("Fetching items+weapons for edit menu: %s"):format(shopName))
 
-    BccUtils.RPC:Call("bcc-shops:GetItemsForShop", { shopName = shopName }, function(success, result)
+    exports['feather-core']:CallRPC("bcc-shops:GetItemsForShop", { shopName = shopName }, function(success, result)
         if not success or type(result) ~= "table" then
             Notify(result or _U("failedToFetchItems"), "error", 4000)
             return
@@ -627,7 +627,7 @@ function OpenEditNPCShopMenu(shopName)
 
             -- keep image key stable off the internal name
             local imageKey    = (row.item_name or row.weapon_name)
-            local img         = "nui://vorp_inventory/html/img/items/" .. imageKey .. ".png"
+            local img         = "nui://feather-inventory/ui/images/items/" .. imageKey .. ".png"
 
             idx               = idx + 1
             combinedRows[idx] = row
@@ -704,7 +704,7 @@ function OpenEditNPCItemMenu(shopName, item)
     local itemLevel = item.level_required
     local currentCategoryId = tonumber(item.category_id or item.category) or nil
 
-    local categories = BccUtils.RPC:CallAsync("bcc-shops:GetShopCategories")
+    local categories = exports['feather-core']:CallRPCAsync("bcc-shops:GetShopCategories")
     local categoryOptions, selectedCategoryId = {}, currentCategoryId
 
     if categories and #categories > 0 then
@@ -820,7 +820,7 @@ function OpenEditNPCItemMenu(shopName, item)
 
         devPrint("[Edit Item] Payload: " .. json.encode(payload))
 
-        BccUtils.RPC:Call("bcc-shops:EditItemNPCShop", payload, function(success)
+        exports['feather-core']:CallRPC("bcc-shops:EditItemNPCShop", payload, function(success)
             if success then
                 Notify(_U('itemUpdated'), "success", 4000)
                 OpenEditNPCShopMenu(shopName)
@@ -975,7 +975,7 @@ function OpenEditNPCWeaponMenu(shopName, weapon)
 
         devPrint("[Edit Weapon] Payload: " .. json.encode(payload))
 
-        BccUtils.RPC:Call("bcc-shops:EditItemNPCWeapon", payload, function(success, err)
+        exports['feather-core']:CallRPC("bcc-shops:EditItemNPCWeapon", payload, function(success, err)
             if success then
                 Notify(_U('itemUpdated'), "success", 4000)
                 OpenEditNPCShopMenu(shopName)
@@ -1071,7 +1071,7 @@ function OpenCreateNPCStoreMenu(npcs)
         elseif not storeDetails.npcHeading then
             Notify(_U('fillHeading'), "error", 4000)
         else
-            BccUtils.RPC:Call("bcc-shops:createNPCStore", {
+            exports['feather-core']:CallRPC("bcc-shops:createNPCStore", {
                 storeType    = storeDetails.storeType,
                 shopName     = storeDetails.shopName,
                 shopLocation = storeDetails.shopLocation,
@@ -1082,7 +1082,7 @@ function OpenCreateNPCStoreMenu(npcs)
             }, function(success)
                 if success then
                     Notify(_U('npcShopAdded'), "success", 4000)
-                    BccUtils.RPC:Notify("bcc-shops:RefreshStoreData", {})
+                    exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {})
                     BCCShopsMainMenu:Close()
                 else
                     Notify(_U('npcShopAddFailed'), "error", 4000)

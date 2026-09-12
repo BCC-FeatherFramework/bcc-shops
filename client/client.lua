@@ -1,7 +1,7 @@
 
-VORPcore = exports.vorp_core:GetCore()
-BccUtils = exports['bcc-utils'].initiate()
-FeatherMenu = exports['feather-menu'].initiate()
+
+
+FeatherMenu = FeatherMenuV2Compat
 
 CreatedBlip, CreatedNPC, playerStores, npcStores, globalNearbyShops, currentPlayers, ownedShops = {}, {}, {}, {}, {}, {},{}
 isPlayerNearStore, storesFetched = false, false
@@ -105,7 +105,7 @@ end
 function OpenPlayerBuySellMenu(shopName)
     devPrint("Opening Buy/Sell Menu for Player store: " .. shopName)
 
-    BccUtils.RPC:Call("bcc-shops:fetchPlayerStoreInfo", { shopName = shopName }, function(data, err)
+    exports['feather-core']:CallRPC("bcc-shops:fetchPlayerStoreInfo", { shopName = shopName }, function(data, err)
         if not data then
             devPrint("Failed to fetch store: " .. (err or "Unknown error"))
             return
@@ -119,7 +119,7 @@ end
 function OpenAddPlayerItemMenu(storeName)
     devPrint("Checking store ownership/access for: " .. storeName)
 
-    local ownershipData = BccUtils.RPC:CallAsync("bcc-shops:CheckStoreOwnership", { storeName = storeName })
+    local ownershipData = exports['feather-core']:CallRPCAsync("bcc-shops:CheckStoreOwnership", { storeName = storeName })
 
     if not ownershipData or not ownershipData.storeName then
         devPrint("Ownership check failed.")
@@ -132,7 +132,7 @@ function OpenAddPlayerItemMenu(storeName)
     if ownershipData.isOwner or ownershipData.hasAccess then
         devPrint("Player has permission to add items to store: " .. ownershipData.storeName)
 
-        local result = BccUtils.RPC:CallAsync("bcc-shops:fetchPlayerInventory", { shopName = ownershipData.storeName })
+        local result = exports['feather-core']:CallRPCAsync("bcc-shops:fetchPlayerInventory", { shopName = ownershipData.storeName })
         if not result then
             devPrint("Failed to fetch inventory.")
             return

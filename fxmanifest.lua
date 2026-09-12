@@ -17,6 +17,8 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/feather/init.lua',
+    'client/feather/menu_v2.lua',
     'client/client.lua',
     'client/controllers/*.lua',
 	'client/services/*.lua',
@@ -25,6 +27,7 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'server/feather/init.lua',
     'server/dbupdater.lua',
 	'server/main.lua',
     'server/helpers/*.lua',
@@ -36,8 +39,14 @@ files {
 }
 
 dependencies {
-    'vorp_core',
-    'vorp_inventory',
-    'feather-menu',
-    'bcc-utils'
+    'oxmysql',
+    'feather-core',
+    'feather-character',
+    'feather-roles',
+    'feather-inventory',
+    'feather-weapons',
+    'feather-toolkit',
+    'feather-notify',
+    'feather-menu-v2',
+    'bcc-banks'
 }

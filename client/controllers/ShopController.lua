@@ -1,29 +1,34 @@
-RegisterNetEvent('vorp:SelectedCharacter')
-AddEventHandler('vorp:SelectedCharacter', function()
-    BccUtils.RPC:Call("bcc-shops:CheckAdmin", {}, function(isAdmin)
+RegisterNetEvent('Feather:Character:Spawned')
+AddEventHandler('Feather:Character:Spawned', function()
+    exports['feather-core']:CallRPC("bcc-shops:CheckAdmin", {}, function(isAdmin)
         AdminAllowed = isAdmin
+        npcStores = exports['feather-core']:CallRPCAsync('bcc-shops:FetchNPCShops') or {}
+        playerStores = exports['feather-core']:CallRPCAsync('bcc-shops:FetchPlayerShops') or {}
+        storesFetched = true
+        CreateBlips()
+        CreateNPCs()
         devPrint("[RPC] Admin check result: " .. tostring(isAdmin))
     end)
 end)
 
 CreateThread(function()
     devPrint("Prompts initialized")
-    local BCCShopsMenuPrompt = BccUtils.Prompts:SetupPromptGroup()
+    local BCCShopsMenuPrompt = ShopsToolkit.Prompts:SetupPromptGroup()
     local shopprompt = BCCShopsMenuPrompt:RegisterPrompt(_U('PromptName'), Config.keys.access, 1, 1, true, 'hold', { timedeventhash = 'MEDIUM_TIMED_EVENT' })
 
     -- Await admin check
-    AdminAllowed = BccUtils.RPC:CallAsync("bcc-shops:CheckAdmin")
+    AdminAllowed = exports['feather-core']:CallRPCAsync("bcc-shops:CheckAdmin")
     devPrint("[RPC] Admin check result: " .. tostring(AdminAllowed))
 
     -- Await NPC shops
-    npcStores = BccUtils.RPC:CallAsync("bcc-shops:FetchNPCShops")
+    npcStores = exports['feather-core']:CallRPCAsync("bcc-shops:FetchNPCShops") or {}
 
     if currentAction == "deleteNPCStores" then
         OpenDeleteNPCStoresMenu()
     end
 
     -- Await Player shops
-    playerStores = BccUtils.RPC:CallAsync("bcc-shops:FetchPlayerShops")
+    playerStores = exports['feather-core']:CallRPCAsync("bcc-shops:FetchPlayerShops") or {}
     storesFetched = true
     CreateBlips()
     CreateNPCs()
@@ -104,7 +109,7 @@ CreateThread(function()
     end
 end)
 
-BccUtils.RPC:Register("bcc-shops:OpenManageStoresUI", function(data)
+exports['feather-core']:RegisterRPC("bcc-shops:OpenManageStoresUI", function(data)
     OpenInitialManageMenu(data.shops, data.players)
 end)
 
