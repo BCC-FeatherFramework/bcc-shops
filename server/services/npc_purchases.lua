@@ -82,33 +82,10 @@ local function sendWebhook(shopId, shopName, label, name, qty, total, isWeapon)
 end
 
 local function performNpcPurchase(shopId, shopName, item)
-    local maxAvailable = tonumber(item.buy_quantity or 0)
-    if maxAvailable <= 0 then return false end
-
-    local pool = {1, 1, 1, 2, 2, 3, 3, 4, 5}
-    local desired = pool[math.random(1, #pool)]
-    local qty = math.min(desired, maxAvailable)
-    local price = tonumber(item.buy_price or 0)
-    local total = price * qty
-
-    if qty <= 0 or total <= 0 then return false end
-
-    if item.is_weapon then
-        MySQL.update.await(
-            'UPDATE bcc_shop_weapon_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
-            { qty, shopId, item.name }
-        )
-    else
-        MySQL.update.await(
-            'UPDATE bcc_shop_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND item_name = ?',
-            { qty, shopId, item.name }
-        )
-    end
-
-    MySQL.update.await('UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?', { total, shopId })
-
-    sendWebhook(shopId, shopName, item.label, item.name, qty, total, item.is_weapon)
-    return true
+    -- Requires a funded merchant account in Economy. Never credit a local ledger.
+    local result = ShopsPayments.ShopFundsUnavailable()
+    devPrint('[NPC AutoBuy] Purchase blocked:', result.code)
+    return false
 end
 
 CreateThread(function()

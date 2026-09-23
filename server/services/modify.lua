@@ -1,246 +1,53 @@
+-- Existing BCC RPC names and presentation; payment state is owned by ShopsPayments.
 exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItem", function(params, cb, src)
     local _U = ShopTranslator(src)
-    local Character = ShopsCore.GetCharacterContext(src).character
-    local isWeapon = params.isWeapon
-
-    local itemDetails
-    if isWeapon then
-        itemDetails = MySQL.query.await('SELECT * FROM bcc_shop_weapon_items WHERE item_name = ?', { params.itemName })
-    else
-        itemDetails = MySQL.query.await('SELECT * FROM bcc_shop_items WHERE item_name = ?', { params.itemName })
+    local paid = ShopsPayments.Purchase(params, src, false)
+    if not paid.ok then
+        ShopsPayments.NotifyFailure(src, paid)
+        return cb(false, { code = paid.code })
     end
+    if paid.value.replayed then return cb(true, paid.value) end
+    local context = ShopsCore.GetCharacterContext(src)
+    if not context then return cb(true, paid.value) end
+    local Character = context.character
+    local shopId = paid.value.shopId
+    local itemDetails = { item_label = paid.value.label }
+    params = { itemName = paid.value.itemName, quantity = paid.value.quantity, total = paid.value.total }
+    NotifyClient(src,
+        _U("shop_bought_item") .. params.quantity .. "x " .. itemDetails.item_label .. _U(paid.value.currency == "gold" and "forgold" or "formoney") .. params
+        .total,
+        "success")
 
-    itemDetails = itemDetails and itemDetails[1]
-
-    if not itemDetails then
-        devPrint("Item not found: " .. tostring(params.itemName))
-        NotifyClient(src, _U("shop_item_not_found"), "error")
-        return cb(false)
-    end
-
-    devPrint("Fetched item details: " .. json.encode(itemDetails))
-
-    local level = getLevelFromXP(Character.xp)
-    if level < (itemDetails.level_required or 0) then
-        NotifyClient(src, _U("shop_level_required", { level = itemDetails.level_required }), "warning")
-        return cb(false)
-    end
-
-    local query = [[
-        SELECT buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND is_npc_shop = 1)
-          AND item_name = @itemName
-        UNION
-        SELECT buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND owner_id IS NOT NULL)
-          AND item_name = @itemName
-    ]]
-
-    local results = MySQL.query.await(query, {
-        ['@shopName'] = params.shopName,
-        ['@itemName'] = params.itemName
-    })
-
-    if not results or #results == 0 then
-        NotifyClient(src, _U("shop_item_not_found"), "error")
-        return cb(false)
-    end
-
-    local data = results[1]
-    local shopId = data.shop_id
-    local shopType = data.shop_type
-    local buyQuantity = data.buy_quantity or 0
-
-    devPrint("Shop Type:", shopType, "| Shop ID:", shopId, "| Buy Quantity:", buyQuantity)
-
-    if buyQuantity < params.quantity then
-        NotifyClient(src, _U("shop_not_enough_stock"), "warning")
-        return cb(false)
-    end
-
-    if Character.money < params.total then
-        NotifyClient(src, _U("shop_not_enough_money"), "error")
-        return cb(false)
-    end
-
-    local canCarryItems = ShopsInventory:canCarryItems(src, params.quantity, nil)
-    local canCarry = ShopsInventory:canCarryItem(src, params.itemName, params.quantity, nil)
-
-    if canCarry and canCarryItems then
-        Character.DebitWallet(0, params.total)
-        local granted, failure = pcall(function() ShopsInventory:addItem(src, params.itemName, params.quantity) end)
-        if not granted then
-            Character.CreditWallet(0, params.total)
-            devPrint('Inventory grant failed:', failure)
-            return cb(false)
-        end
-
-        devPrint("Transaction processed. Removed currency and added item:", params.itemName, "x" .. params.quantity)
-
-        MySQL.update.await(
-            'UPDATE bcc_shop_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND item_name = ?',
-            { params.quantity, shopId, params.itemName }
-        )
-
-        MySQL.update.await(
-            'UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?',
-            { params.total, shopId }
-        )
-
-        NotifyClient(src,
-            _U("shop_bought_item") .. params.quantity .. "x " .. itemDetails.item_label .. _U("formoney") .. params
-            .total,
-            "success")
-
-        local shopResult = MySQL.query.await(
-            'SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?',
-            { shopId }
-        )
-        local shopInfo = shopResult and shopResult[1] or nil
-
-        if not shopInfo then
-            devPrint("shopInfo is nil for shopId:", shopId)
-            return cb(true)
-        end
-
-        local webhook = shopInfo.webhook_link or Config.Webhook
-        local shopName = shopInfo.shop_name or "Unknown"
-
-        local embed = { {
-            color = 3145631,
-            title = "Item Purchased",
-            description = table.concat({
-                "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
-                "**Character ID:** `" .. Character.characterId .. "`",
-                "**Item Name:** `" .. itemDetails.item_label .. "`",
-                "**Item ID:** `" .. params.itemName .. "`",
-                "**Quantity:** `" .. params.quantity .. "`",
-                "**Total Cost:** `" .. params.total .. "`",
-                "**Shop Name:** `" .. shopName .. "`"
-            }, "\n")
-        } }
-
-        if shopInfo.webhook_link then
-            devPrint("Sending to shop-specific webhook:", shopInfo.webhook_link)
-            ShopsToolkit.Discord.sendMessage(
-                shopInfo.webhook_link,
-                Config.WebhookTitle,
-                Config.WebhookAvatar,
-                "Item Purchased",
-                nil,
-                embed
-            )
-        else
-            devPrint("No shop-specific webhook defined.")
-        end
-
-        devPrint("Sending to global webhook:", Config.Webhook)
-        ShopsToolkit.Discord.sendMessage(
-            Config.Webhook,
-            Config.WebhookTitle,
-            Config.WebhookAvatar,
-            "Item Purchased",
-            nil,
-            embed
-        )
-
-        cb(true)
-    else
-        devPrint("Player cannot carry item:", params.itemName, "x" .. params.quantity)
-        NotifyClient(src, _U("shop_cannot_carry"), "warning")
-        return cb(false)
-    end
-end)
-
-exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItemNPC", function(params, cb)
-    local Character = {
-        firstname = "Shop",
-        lastname = "Visitor",
-        characterId = "NPC"
-    }
-
-    if not params.itemName then
-        devPrint("[NPC Purchase] itemName is nil")
-        return cb(false)
-    end
-
-    local itemResult = MySQL.query.await('SELECT * FROM bcc_shop_items WHERE item_name = ?', { params.itemName })
-    local itemDetails = itemResult and itemResult[1] or nil
-
-    if not itemDetails then
-        devPrint("[NPC Purchase] itemDetails not found for: " .. tostring(params.itemName))
-        return cb(false)
-    end
-
-    local query = [[
-        SELECT buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND is_npc_shop = 1)
-          AND item_name = @itemName
-        UNION
-        SELECT buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND owner_id IS NOT NULL)
-          AND item_name = @itemName
-    ]]
-
-    local results = MySQL.query.await(query, {
-        ['@shopName'] = params.shopName,
-        ['@itemName'] = params.itemName
-    })
-
-    if not results or #results == 0 then
-        devPrint("[NPC Purchase] item not found in shop: " .. tostring(params.shopName))
-        return cb(false)
-    end
-
-    local data = results[1]
-    local shopId = data.shop_id
-    local buyQuantity = data.buy_quantity or 0
-
-    if buyQuantity < params.quantity then
-        devPrint("[NPC Purchase] Not enough stock for " .. params.itemName)
-        return cb(false)
-    end
-
-    MySQL.update.await('UPDATE bcc_shop_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND item_name = ?', {
-        params.quantity, shopId, params.itemName
-    })
-
-    MySQL.update.await('UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?', {
-        params.total, shopId
-    })
-
-    local shopResult = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopResult = MySQL.query.await(
+        'SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?',
+        { shopId }
+    )
     local shopInfo = shopResult and shopResult[1] or nil
 
     if not shopInfo then
-        devPrint("[NPC Purchase] shopInfo is nil for shopId: " .. tostring(shopId))
-        return cb(true)
+        devPrint("shopInfo is nil for shopId:", shopId)
+        return cb(true, paid.value)
     end
 
     local webhook = shopInfo.webhook_link or Config.Webhook
-    local shopName = shopInfo.shop_name or params.shopName or "Unknown"
+    local shopName = shopInfo.shop_name or "Unknown"
 
     local embed = { {
         color = 3145631,
         title = "Item Purchased",
         description = table.concat({
-            "**Character Name:** `NPC`",
-            "**Character ID:** `NPC`",
+            "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
+            "**Character ID:** `" .. Character.characterId .. "`",
             "**Item Name:** `" .. itemDetails.item_label .. "`",
             "**Item ID:** `" .. params.itemName .. "`",
             "**Quantity:** `" .. params.quantity .. "`",
-            "**Total Cost:** `" .. params.total .. "`",
+            "**Total Cost:** `" .. params.total .. " " .. paid.value.currency .. "`",
             "**Shop Name:** `" .. shopName .. "`"
         }, "\n")
     } }
 
-    -- Send to shop-specific webhook if available
     if shopInfo.webhook_link then
-        devPrint("[NPC Purchase] Sending to shop-specific webhook: " .. shopInfo.webhook_link)
+        devPrint("Sending to shop-specific webhook:", shopInfo.webhook_link)
         ShopsToolkit.Discord.sendMessage(
             shopInfo.webhook_link,
             Config.WebhookTitle,
@@ -250,11 +57,10 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItemNPC", function(params
             embed
         )
     else
-        devPrint("[NPC Purchase] No shop-specific webhook. Using global only.")
+        devPrint("No shop-specific webhook defined.")
     end
 
-    -- Always send to global webhook
-    devPrint("[NPC Purchase] Sending to global webhook: " .. Config.Webhook)
+    devPrint("Sending to global webhook:", Config.Webhook)
     ShopsToolkit.Discord.sendMessage(
         Config.Webhook,
         Config.WebhookTitle,
@@ -264,271 +70,26 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItemNPC", function(params
         embed
     )
 
-    cb(true)
-end)
-
-exports['feather-core']:RegisterRPC("bcc-shops:SellItem", function(params, cb, src)
-    local _U = ShopTranslator(src)
-    devPrint("SellItem called by src:", src)
-
-    if not params or not params.itemName or not params.shopName or not params.quantity or not params.total then
-        devPrint("Invalid params received:", json.encode(params))
-        NotifyClient(src, _U("shop_item_not_found"), "error")
-        return cb(false)
-    end
-
-    local user = ShopsCore.GetCharacterContext(src)
-    if not user then
-        devPrint("No user found for src:", src)
-        return cb(false)
-    end
-
-    local Character = user.character
-    if not Character then
-        devPrint("No character found for src:", src)
-        return cb(false)
-    end
-
-    devPrint("Character:", Character.firstName, Character.lastName, "XP:", Character.xp)
-
-    local itemResult = MySQL.query.await('SELECT * FROM bcc_shop_items WHERE item_name = ?', { params.itemName })
-    local itemDetails = itemResult and itemResult[1] or nil
-
-    if not itemDetails then
-        devPrint("Item not found in database:", params.itemName)
-        NotifyClient(src, _U("shop_item_not_found"), "error")
-        return cb(false)
-    end
-
-    local level = getLevelFromXP(Character.xp)
-    if level < (itemDetails.level_required or 0) then
-        devPrint("Character level too low: required", itemDetails.level_required, "got", level)
-        NotifyClient(src, _U("shop_level_required", { level = itemDetails.level_required }), "warning")
-        return cb(false)
-    end
-
-    local shopData = MySQL.query.await([[
-        SELECT buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND is_npc_shop = 1)
-          AND item_name = ?
-        UNION
-        SELECT buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL)
-          AND item_name = ?
-    ]], {
-        params.shopName, params.itemName,
-        params.shopName, params.itemName
-    })
-
-    if not shopData or #shopData == 0 then
-        devPrint("Shop item not found in shop:", params.shopName)
-        NotifyClient(src, _U("shop_item_not_found"), "error")
-        return cb(false)
-    end
-
-    local data = shopData[1]
-    local shopId, shopType = data.shop_id, data.shop_type
-    local sellQuantity = data.sell_quantity or 0
-
-    devPrint("🏪 Shop Type:", shopType, "| Shop ID:", shopId, "| Sell Quantity:", sellQuantity)
-
-    if sellQuantity < params.quantity then
-        devPrint("Not enough sell quantity. Requested:", params.quantity, "Available:", sellQuantity)
-        NotifyClient(src, _U("shop_not_enough_stock_to_sell"), "warning")
-        return cb(false)
-    end
-
-    local removed = ShopsInventory:subItem(src, params.itemName, params.quantity, {})
-    if removed then
-        devPrint("Removed item from inventory. Proceeding with sale.")
-
-        if shopType == "player" then
-            local ledger = MySQL.scalar.await("SELECT ledger FROM bcc_shops WHERE shop_id = ?", { shopId })
-            if not ledger or ledger < params.total then
-                devPrint("Not enough money in shop ledger. Ledger:", ledger, "Needed:", params.total)
-                NotifyClient(src, _U("shop_not_enough_ledger_money"), "error")
-                return cb(false)
-            end
-
-            Character.CreditWallet(0, params.total)
-            devPrint("Gave player money (ledger deducted):", params.total)
-
-            -- move stock: sell_quantity -= qty, buy_quantity += qty
-            MySQL.update.await(
-                "UPDATE bcc_shop_items " ..
-                "SET sell_quantity = GREATEST(sell_quantity - ?, 0), " ..
-                "    buy_quantity  = buy_quantity + ? " ..
-                "WHERE shop_id = ? AND item_name = ?",
-                { params.quantity, params.quantity, shopId, params.itemName }
-            )
-
-            MySQL.update.await("UPDATE bcc_shops SET ledger = ledger - ? WHERE shop_id = ?", { params.total, shopId })
-        else
-            Character.CreditWallet(0, params.total)
-            devPrint("Gave player money (npc shop):", params.total)
-
-            MySQL.update.await(
-                "UPDATE bcc_shop_items " ..
-                "SET sell_quantity = GREATEST(sell_quantity - ?, 0), " ..
-                "    buy_quantity  = buy_quantity + ? " ..
-                "WHERE shop_id = ? AND item_name = ?",
-                { params.quantity, params.quantity, shopId, params.itemName }
-            )
-        end
-
-        NotifyClient(src,
-            _U("shop_sold_item") .. params.quantity .. "x " .. itemDetails.item_label .. _U("formoney") .. params.total,
-            "success")
-
-        -- Webhook logging
-        local webhookData = MySQL.query.await("SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?",
-            { shopId })
-        local shopInfo = webhookData and webhookData[1] or nil
-        local webhook = (shopInfo and shopInfo.webhook_link) or Config.Webhook
-        local shopName = (shopInfo and shopInfo.shop_name) or params.shopName
-
-        devPrint("📤 Sending webhook log. Webhook:", webhook)
-
-        local embed = { {
-            color = 3145631,
-            title = "🛒 Item Sold",
-            description = table.concat({
-                "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
-                "**Character ID:** `" .. Character.characterId .. "`",
-                "**Item Name:** `" .. itemDetails.item_label .. "`",
-                "**Item ID:** `" .. params.itemName .. "`",
-                "**Quantity:** `" .. params.quantity .. "`",
-                "**Total Cost:** `" .. params.total .. "`",
-                "**Shop Name:** `" .. shopName .. "`"
-            }, "\n")
-        } }
-
-        -- Send to shop-specific webhook if present
-        if shopInfo and shopInfo.webhook_link then
-            devPrint("📤 Sending to shop-specific webhook:", shopInfo.webhook_link)
-            ShopsToolkit.Discord.sendMessage(
-                shopInfo.webhook_link,
-                Config.WebhookTitle,
-                Config.WebhookAvatar,
-                "🛒 Item Sold",
-                nil,
-                embed
-            )
-        else
-            devPrint("No shop-specific webhook, defaulting only to global.")
-        end
-
-        -- Always send to global webhook (Config.Webhook)
-        devPrint("📤 Sending to global webhook:", Config.Webhook)
-        ShopsToolkit.Discord.sendMessage(
-            Config.Webhook,
-            Config.WebhookTitle,
-            Config.WebhookAvatar,
-            "🛒 Item Sold",
-            nil,
-            embed
-        )
-
-        cb(true)
-    else
-        devPrint("Failed to remove item:", params.itemName)
-        NotifyClient(src, _U("shop_failed_remove_item"), "error")
-        return cb(false)
-    end
+    cb(true, paid.value)
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeapon", function(params, cb, src)
     local _U = ShopTranslator(src)
-    local Character = ShopsCore.GetCharacterContext(src).character
-    local weaponName = params.weaponName
+    local paid = ShopsPayments.Purchase(params, src, true)
+    if not paid.ok then
+        ShopsPayments.NotifyFailure(src, paid)
+        return cb(false, { code = paid.code })
+    end
+    if paid.value.replayed then return cb(true, paid.value) end
+    local context = ShopsCore.GetCharacterContext(src)
+    if not context then return cb(true, paid.value) end
+    local Character = context.character
+    local shopId, weaponName = paid.value.shopId, paid.value.itemName
     local shopName = params.shopName
-
-    if not weaponName then
-        devPrint("weaponName is nil")
-        return cb(false)
-    end
-
-    local weaponResult = MySQL.query.await('SELECT * FROM bcc_shop_weapon_items WHERE weapon_name = ?', { weaponName })
-    if not weaponResult or #weaponResult == 0 then
-        devPrint("[PurchaseWeapon] Weapon not found: " .. tostring(weaponName))
-        NotifyClient(src, _U("shop_weapon_not_found"), "error")
-        return cb(false)
-    end
-
-    local weaponDetails = weaponResult[1]
-    weaponDetails.level = weaponDetails.level_required or 0
-    weaponDetails.label = weaponDetails.weapon_label or weaponName
-
-    local playerLevel = getLevelFromXP(Character.xp)
-    if playerLevel < weaponDetails.level then
-        NotifyClient(src, _U("shop_level_required", { level = weaponDetails.level }), "warning")
-        return cb(false)
-    end
-
-    local query = [[
-        SELECT buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND is_npc_shop = 1)
-          AND weapon_name = ?
-        UNION
-        SELECT buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL)
-          AND weapon_name = ?
-    ]]
-
-    local results = MySQL.query.await(query, { shopName, weaponName, shopName, weaponName })
-    if not results or #results == 0 then
-        NotifyClient(src, _U("shop_weapon_not_found"), "error")
-        return cb(false)
-    end
-
-    local data = results[1]
-    local shopId = data.shop_id
-    local buyQuantity = data.buy_quantity or 0
-
-    if buyQuantity < params.quantity then
-        NotifyClient(src, _U("shop_not_enough_stock"), "warning")
-        return cb(false)
-    end
-
-    if Character.money < params.total then
-        NotifyClient(src, _U("shop_not_enough_money"), "error")
-        return cb(false)
-    end
-
-    local canCarry = ShopsInventory:canCarryWeapons(src, params.quantity, nil, weaponName)
-    if not canCarry then
-        NotifyClient(src, _U("shop_cannot_carry_weapon"), "error")
-        return cb(false)
-    end
-
-    local issuedInstances = {}
-    for i = 1, params.quantity do
-        local ok, instance = pcall(function() return ShopsInventory:createWeapon(src, weaponName) end)
-        if not ok then
-            for _, instanceId in ipairs(issuedInstances) do ShopsInventory:subWeapon(src, instanceId) end
-            devPrint('Weapon issuance failed:', instance)
-            return cb(false)
-        end
-        issuedInstances[#issuedInstances + 1] = instance
-    end
-
-    Character.DebitWallet(0, params.total)
-
-    MySQL.update.await(
-        'UPDATE bcc_shop_weapon_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
-        { params.quantity, shopId, weaponName }
-    )
-
-    MySQL.update.await('UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?', {
-        params.total, shopId
-    })
-
+    local weaponDetails = { label = paid.value.label }
+    params = { quantity = paid.value.quantity, total = paid.value.total }
     NotifyClient(src,
-        _U("shop_bought_weapon") .. params.quantity .. "x " .. weaponDetails.label .. _U("formoney") .. params.total,
+        _U("shop_bought_weapon") .. params.quantity .. "x " .. weaponDetails.label .. _U(paid.value.currency == "gold" and "forgold" or "formoney") .. params.total,
         "success")
 
     local shopResult = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
@@ -546,7 +107,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeapon", function(params,
             "**Weapon Name:** `" .. weaponDetails.label .. "`",
             "**Weapon ID:** `" .. weaponName .. "`",
             "**Quantity:** `" .. params.quantity .. "`",
-            "**Total Cost:** `$" .. params.total .. "`",
+            "**Total Cost:** `" .. params.total .. " " .. paid.value.currency .. "`",
             "**Shop Name:** `" .. finalShopName .. "`"
         }, "\n")
     }
@@ -558,292 +119,21 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeapon", function(params,
     ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, message.title, nil,
         { message })
 
-    cb(true)
+    cb(true, paid.value)
 end)
 
-exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeaponNPC", function(params, cb)
-    local Character = {
-        firstname = "Shop",
-        lastname = "Visitor",
-        characterId = "NPC"
-    }
-
-    local weaponName = params.weaponName
-    local shopName = params.shopName
-
-    if not weaponName or not shopName then
-        devPrint("[NPC Purchase] Missing weaponName or shopName")
-        return cb(false)
-    end
-
-    local query = [[
-        SELECT weapon_label, buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND is_npc_shop = 1)
-          AND weapon_name = @weaponName
-        UNION
-        SELECT weapon_label, buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND owner_id IS NOT NULL)
-          AND weapon_name = @weaponName
-    ]]
-
-    MySQL.Async.fetchAll(query, {
-        ['@shopName'] = shopName,
-        ['@weaponName'] = weaponName
-    }, function(results)
-        if not results or #results == 0 then
-            devPrint("[NPC Purchase]  Weapon not found in shop: " .. tostring(shopName))
-            return cb(false)
-        end
-
-        local data = results[1]
-        local shopId = data.shop_id
-        local buyQuantity = data.buy_quantity or 0
-        local weaponLabel = data.weapon_label or weaponName
-
-        if buyQuantity < params.quantity then
-            devPrint("[NPC Purchase] Not enough stock for weapon: " .. weaponName)
-            return cb(false)
-        end
-
-        -- Update stock and ledger
-        MySQL.Async.execute(
-            'UPDATE bcc_shop_weapon_items SET buy_quantity = buy_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
-            { params.quantity, shopId, weaponName }
-        )
-        MySQL.Async.execute('UPDATE bcc_shops SET ledger = ledger + ? WHERE shop_id = ?', {
-            params.total, shopId
-        })
-
-        -- Get shop info for webhook
-        local shopResult = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
-        local shopInfo = shopResult and shopResult[1] or {}
-
-        local webhook = shopInfo.webhook_link or Config.Webhook
-        local shopDisplayName = shopInfo.shop_name or shopName
-
-        local embed = {
-            color = 3145631,
-            title = "🛒 Weapon Purchased",
-            description = table.concat({
-                "**Character Name:** `NPC`",
-                "**Character ID:** `NPC`",
-                "**Weapon Name:** `" .. weaponLabel .. "`",
-                "**Weapon ID:** `" .. weaponName .. "`",
-                "**Quantity:** `" .. params.quantity .. "`",
-                "**Total Cost:** `$" .. params.total .. "`",
-                "**Shop Name:** `" .. shopDisplayName .. "`"
-            }, "\n")
-        }
-
-        -- Send to shop-specific webhook
-        if webhook then
-            devPrint("📤 Sending to shop-specific webhook: " .. webhook)
-            ShopsToolkit.Discord.sendMessage(webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
-        end
-
-        -- Send to global fallback webhook
-        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, embed.title, nil, { embed })
-
-        cb(true)
-    end)
-end)
-
-exports['feather-core']:RegisterRPC("bcc-shops:SellWeapon", function(params, cb, src)
-    local _U = ShopTranslator(src)
-    local Character = ShopsCore.GetCharacterContext(src).character
-
-    if not params.weaponName then
-        devPrint("[SellWeapon] weaponName is nil")
-        NotifyClient(src, _U("shop_weapon_not_found"), "error")
-        return cb(false)
-    end
-
-    local weaponResult = MySQL.query.await('SELECT * FROM bcc_shop_items WHERE item_name = ?', { params.weaponName })
-    if not weaponResult or #weaponResult == 0 then
-        devPrint("item_name not found: " .. tostring(params.weaponName))
-        NotifyClient(src, _U("shop_weapon_not_found"), "error")
-        return cb(false)
-    end
-
-    local weaponDetails = weaponResult[1]
-    devPrint("Fetched details: " .. json.encode(weaponDetails))
-
-    local level = getLevelFromXP(Character.xp)
-    if level < (weaponDetails.level_required or 0) then
-        NotifyClient(src, _U("shop_level_required", { level = weaponDetails.level_required }), "warning")
-        return cb(false)
-    end
-
-    local query = [[
-        SELECT buy_quantity, sell_quantity, shop_id, 'npc' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND is_npc_shop = 1)
-          AND weapon_name = @weaponName
-        UNION
-        SELECT buy_quantity, sell_quantity, shop_id, 'player' as shop_type
-        FROM bcc_shop_weapon_items
-        WHERE shop_id = (SELECT shop_id FROM bcc_shops WHERE shop_name = @shopName AND owner_id IS NOT NULL)
-          AND weapon_name = @weaponName
-    ]]
-
-    local results = MySQL.query.await(query, {
-        ['@shopName'] = params.shopName,
-        ['@weaponName'] = params.weaponName
-    })
-
-    if not results or #results == 0 then
-        NotifyClient(src, _U("shop_weapon_not_found"), "error")
-        return cb(false)
-    end
-
-    local data = results[1]
-    local sellQuantity = data.sell_quantity or 0
-    local shopId = data.shop_id
-    local shopType = data.shop_type
-
-    if sellQuantity < params.quantity then
-        NotifyClient(src, _U("shop_not_enough_stock_to_sell"), "warning")
-        return cb(false)
-    end
-
-    ShopsInventory:subItem(src, params.weaponName, params.quantity, {}, function(success)
-        if not success then
-            NotifyClient(src, _U("shop_failed_remove_item"), "error")
-            return cb(false)
-        end
-
-        if shopType == 'player' then
-            MySQL.Async.fetchScalar('SELECT ledger FROM bcc_shops WHERE shop_id = ?', { shopId },
-                function(ledger)
-                    if not ledger or ledger < params.total then
-                        NotifyClient(src, _U("shop_not_enough_ledger_money"), "error")
-                        return cb(false)
-                    end
-
-                    Character.CreditWallet(0, params.total)
-                    MySQL.Async.execute(
-                        'UPDATE bcc_shop_weapon_items SET sell_quantity = sell_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
-                        {
-                            params.quantity, shopId, params.weaponName
-                        })
-                    MySQL.Async.execute('UPDATE bcc_shops SET ledger = ledger - ? WHERE shop_id = ?', {
-                        params.total, shopId
-                    })
-
-                    NotifyClient(src,
-                        _U("shop_sold_weapon") ..
-                        params.quantity .. "x " .. weaponDetails.weapon_label .. _U("formoney") .. params.total,
-                        "success")
-
-                    -- Get shop info (webhook + name)
-                    local shopResult = MySQL.query.await(
-                        'SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?',
-                        { shopId })
-                    local shopInfo = shopResult and shopResult[1] or nil
-
-                    if not shopInfo then
-                        devPrint("shopInfo is nil for shopId: " .. tostring(shopId))
-                        return cb(true)
-                    end
-
-                    local webhook = shopInfo.webhook_link or Config.Webhook
-                    local shopName = shopInfo.shop_name or "Unknown"
-
-                    -- Send to shop-specific webhook
-                    if webhook then
-                        devPrint("Sending to shop-specific webhook: " .. webhook)
-                        ShopsToolkit.Discord.sendMessage(webhook,
-                            Config.WebhookTitle,
-                            Config.WebhookAvatar,
-                            "🛒 Weapon sold",
-                            nil,
-                            {
-                                {
-                                    color = 3145631,
-                                    title = "🛒 Weapon sold",
-                                    description = table.concat({
-                                        "**Character Name:** `" ..
-                                        Character.firstName .. " " .. Character.lastName .. "`",
-                                        "**Character ID:** `" .. Character.characterId .. "`",
-                                        "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
-                                        "**Weapon ID:** `" .. params.weaponName .. "`",
-                                        "**Quantity:** `" .. params.quantity .. "`",
-                                        "**Total Cost:** `" .. params.total .. "`",
-                                        "**Shop Name:** `" .. shopName .. "`"
-                                    }, "\n")
-                                }
-                            }
-                        )
-                    end
-
-                    devPrint("Sending to global webhook: " .. Config.Webhook)
-                    ShopsToolkit.Discord.sendMessage(
-                        Config.Webhook,
-                        Config.WebhookTitle,
-                        Config.WebhookAvatar,
-                        "🛒 Weapon Sold",
-                        nil,
-                        {
-                            {
-                                color = 3145631,
-                                title = "🛒 Weapon Sold",
-                                description = table.concat({
-                                    "**Character Name:** `" ..
-                                    Character.firstName .. " " .. Character.lastName .. "`",
-                                    "**Character ID:** `" .. Character.characterId .. "`",
-                                    "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
-                                    "**Weapon ID:** `" .. params.weaponName .. "`",
-                                    "**Quantity:** `" .. params.quantity .. "`",
-                                    "**Total Cost:** `" .. params.total .. "`",
-                                    "**Shop Name:** `" .. shopName .. "`"
-                                }, "\n")
-                            }
-                        }
-                    )
-                end)
-        else
-            Character.CreditWallet(0, params.total)
-            MySQL.Async.execute(
-                'UPDATE bcc_shop_weapon_items SET sell_quantity = sell_quantity - ? WHERE shop_id = ? AND weapon_name = ?',
-                {
-                    params.quantity, shopId, params.weaponName
-                })
-
-            NotifyClient(src,
-                _U("shop_sold_weapon") ..
-                params.quantity .. "x " .. weaponDetails.weapon_label .. _U("formoney") .. params.total,
-                "success")
-
-            devPrint("Sending to global webhook: " .. Config.Webhook)
-            ShopsToolkit.Discord.sendMessage(
-                Config.Webhook,
-                Config.WebhookTitle,
-                Config.WebhookAvatar,
-                "🛒 Weapon Sold",
-                nil,
-                {
-                    {
-                        color = 3145631,
-                        title = "🛒 Weapon Sold",
-                        description = table.concat({
-                            "**Character Name:** `" .. Character.firstName .. " " .. Character.lastName .. "`",
-                            "**Character ID:** `" .. Character.characterId .. "`",
-                            "**Weapon Name:** `" .. weaponDetails.weapon_label .. "`",
-                            "**Weapon ID:** `" .. params.weaponName .. "`",
-                            "**Quantity:** `" .. params.quantity .. "`",
-                            "**Total Cost:** `" .. params.total .. "`",
-                            "**Shop Name:** `" .. shopName .. "`"
-                        }, "\n")
-                    }
-                }
-            )
-        end
-
-        cb(true)
-    end)
-end)
+-- Economy currently cannot fund merchant payouts or independent shop accounts.
+-- Reject before removing inventory/stock. Client-triggered NPC purchases must
+-- never mint shop funds; only a future funded server workflow can perform them.
+local function unavailableShopFunds(_, cb, src)
+    local result = ShopsPayments.ShopFundsUnavailable()
+    ShopsPayments.NotifyFailure(src, result)
+    cb(false, { code = result.code })
+end
+exports['feather-core']:RegisterRPC("bcc-shops:SellItem", unavailableShopFunds)
+exports['feather-core']:RegisterRPC("bcc-shops:SellWeapon", unavailableShopFunds)
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItemNPC", unavailableShopFunds)
+exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeaponNPC", unavailableShopFunds)
 
 exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params, cb, src)
     local _U = ShopTranslator(src)
@@ -1672,7 +962,10 @@ exports['feather-core']:RegisterRPC("bcc-shops:CleanupEmptyItems", function(_, c
     local _U = ShopTranslator(source)
     local deleted = MySQL.update.await(
         [[DELETE FROM bcc_shop_items
-          WHERE buy_quantity = 0 AND sell_quantity = 0]])
+          WHERE buy_quantity = 0 AND sell_quantity = 0
+            AND NOT EXISTS (SELECT 1 FROM bcc_shop_payments p
+                WHERE p.stock_id = bcc_shop_items.item_id AND p.is_weapon = 0
+                  AND p.state NOT IN ('fulfilled', 'rejected'))]])
 
     if deleted and deleted > 0 then
         devPrint(" Deleted " .. deleted .. " item(s) from shop_items table.")
@@ -1692,7 +985,10 @@ CreateThread(function()
         
         local deleted = MySQL.update.await(
             [[DELETE FROM bcc_shop_items
-              WHERE buy_quantity = 0 AND sell_quantity = 0]])
+              WHERE buy_quantity = 0 AND sell_quantity = 0
+            AND NOT EXISTS (SELECT 1 FROM bcc_shop_payments p
+                WHERE p.stock_id = bcc_shop_items.item_id AND p.is_weapon = 0
+                  AND p.state NOT IN ('fulfilled', 'rejected'))]])
 
         if deleted and deleted > 0 then
             devPrint("[AutoCleanup] Deleted " .. deleted .. " empty shop item(s).")

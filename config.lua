@@ -6,6 +6,11 @@ Config = {
     devMode = false,
     ManagementRoles = { 'admin', 'owner', 'moderator' }, -- Feather character role keys.
     DefaultPlayerXP = 0, -- Replace with your progression service when available.
+    Payments = {
+        maximumQuantity = 100,
+        maximumDistance = 5.0,
+        maximumAmount = 1000000000000 -- Integer minor units; Economy applies its own limits too.
+    },
     ManageShopsCommand = "manageStores", 
     Webhook = "",
     WebhookTitle = 'BCC-Shops',

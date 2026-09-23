@@ -1,4 +1,7 @@
 Feather.Locale.register('ro', {
+    forgold                         = " pentru aur ",
+    shop_payment_unavailable        = 'Această tranzacție nu este disponibilă momentan. Cumpărătura nu a fost finalizată.',
+    shop_payment_pending            = 'Cumpărătura ta este în așteptare. Reîncearcă aceeași cumpărătură; dacă problema persistă, contactează un administrator.',
     PromptName                      = 'Deschide Meniul',
     BlipName                        = 'Pravalie',
 

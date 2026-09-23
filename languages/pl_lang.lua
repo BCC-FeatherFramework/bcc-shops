@@ -1,4 +1,7 @@
 Feather.Locale.register('pl', {
+    forgold                         = " za złoto ",
+    shop_payment_unavailable        = 'Ta transakcja jest obecnie niedostępna. Zakup nie został zrealizowany.',
+    shop_payment_pending            = 'Twój zakup oczekuje na realizację. Ponów ten sam zakup; jeśli problem nie ustąpi, skontaktuj się z administracją.',
     PromptName                      = 'Otwórz menu',
     BlipName                        = 'Sklep',
 
