@@ -247,14 +247,17 @@ function ProcessPurchase(shopName, item, quantity, isWeapon)
     if quantity and quantity > 0 then
         devPrint("Quantity is valid, proceeding with purchase process.")
 
+        local requestId, paymentKey = BeginShopPayment(shopName, item.item_name, quantity, isWeapon)
         if isWeapon then
             devPrint("Item is a weapon, calling PurchaseWeapon RPC.")
             exports['feather-core']:CallRPC("bcc-shops:PurchaseWeapon", {
                 shopName = shopName,
                 weaponName = item.item_name,
                 quantity = quantity,
+                requestId = requestId,
                 total = totalCost
-            }, function(success)
+            }, function(success, result)
+                FinishShopPayment(paymentKey, requestId, success, result)
                 if success then
                     devPrint("Weapon purchase successful.")
                 else
@@ -267,8 +270,10 @@ function ProcessPurchase(shopName, item, quantity, isWeapon)
                 shopName = shopName,
                 itemName = item.item_name,
                 quantity = quantity,
+                requestId = requestId,
                 total = totalCost
-            }, function(success)
+            }, function(success, result)
+                FinishShopPayment(paymentKey, requestId, success, result)
                 if success then
                     devPrint("Item purchase successful.")
                 else

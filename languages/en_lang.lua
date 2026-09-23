@@ -1,4 +1,7 @@
 Feather.Locale.register('en_us', {
+    forgold                         = " for gold ",
+    shop_payment_unavailable        = 'This transaction is currently unavailable. No purchase was completed.',
+    shop_payment_pending            = 'Your purchase is pending. Retry the same purchase; contact staff if it remains pending.',
     PromptName                      = 'Open Menu',
     BlipName                        = 'Store',
 

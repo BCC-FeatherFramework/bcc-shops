@@ -1,4 +1,25 @@
+ShopsPaymentSchemaReady = false
 CreateThread(function()
+    -- Workflow receipts only. Authoritative monetary balances stay in Economy.
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS bcc_shop_payments (
+            order_id CHAR(36) NOT NULL PRIMARY KEY,
+            buyer_character_id CHAR(36) NOT NULL,
+            request_id VARCHAR(80) NOT NULL,
+            fingerprint TEXT NOT NULL,
+            stock_id INT NOT NULL,
+            is_weapon TINYINT(1) NOT NULL,
+            payload_json LONGTEXT NOT NULL,
+            state VARCHAR(32) NOT NULL,
+            payment_transaction_id CHAR(36) NULL,
+            delivery_json LONGTEXT NULL,
+            last_error VARCHAR(100) NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_bcc_shop_payment_request (buyer_character_id, request_id),
+            KEY idx_bcc_shop_payment_stock (stock_id, is_weapon, state)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+    ]])
     -- bcc_shops table
     MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS bcc_shops (
@@ -134,5 +155,6 @@ CreateThread(function()
         print("^3[bcc-shops]^0 bcc_shop_categories already populated (^5" .. categoryCount .. "^0 rows).")
     end
 
+    ShopsPaymentSchemaReady = true
     print("^3[bcc-shops]^0 Database schema updated ^2successfully^0.")
 end)

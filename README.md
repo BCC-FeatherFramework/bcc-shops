@@ -1,3 +1,5 @@
+> Economy integration is preparation only: current permissions block checkout; sales and player-shop funds are unavailable. See [FEATHER_PORT.md](FEATHER_PORT.md) before starting this version.
+
 # 🛒 BCC Shops – Advanced Shop System for RedM
 
 **BCC Shops** is a powerful and dynamic shop management system for RedM. It allows servers to create immersive NPC-run stores and fully functional player-owned shops, all configurable via an in-game menu. No need to touch config files!

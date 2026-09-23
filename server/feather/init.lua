@@ -23,10 +23,19 @@ end
 -- BCC gameplay compatibility over Feather's local service contracts.
 ShopsCore = {}
 function ShopsCore.GetCharacterContext(src)
-    local c = exports['bcc-banks']:GetBankingContext(tonumber(src))
-    if not c then return nil end
-    c.xp = tonumber(Config.DefaultPlayerXP) or 0 -- Feather Character profiles do not publish progression.
-    return { character = c }
+    local session = exports['feather-core']:GetSessionContext(tonumber(src))
+    if type(session) ~= 'table' or session.ok ~= true or type(session.value) ~= 'table' then return nil end
+    local profile = GetShopCharacterProfile(src)
+    if not profile then return nil end
+    local current = exports['feather-core']:GetSessionContext(tonumber(src))
+    if not current or not current.ok or current.value.sessionId ~= session.value.sessionId
+        or current.value.characterId ~= session.value.characterId then return nil end
+    return { character = {
+        source = tonumber(src), accountId = session.value.accountId,
+        sessionId = session.value.sessionId, characterId = session.value.characterId,
+        firstName = profile.firstName, lastName = profile.lastName,
+        xp = tonumber(Config.DefaultPlayerXP) or 0
+    } }
 end
 function ShopsCore.Notify(src, message, duration)
     return exports['feather-core']:SendNotification({ source = tonumber(src), message = message, duration = duration, style = 'right' })
@@ -88,8 +97,8 @@ function ShopsInventory:canCarryItem(src, name, quantity)
     return r and r.ok and r.value.accepted == true
 end
 function ShopsInventory:canCarryWeapons(src, quantity, _, name) return self:canCarryItem(src, name, quantity) end
-function ShopsInventory:addItem(src, name, quantity)
-    local r = exports['feather-inventory']:GrantCharacterItem(identity(src), name, quantity, 'shops.purchase')
+function ShopsInventory:addItem(src, name, quantity, characterId)
+    local r = exports['feather-inventory']:GrantCharacterItem(characterId or identity(src), name, quantity, 'shops.purchase')
     if not r or not r.ok then error(r and r.code or 'inventory_grant_failed') end
     return true
 end
@@ -101,13 +110,19 @@ function ShopsInventory:subWeapon(src, instanceId, cb)
     local r = exports['feather-inventory']:RemoveCharacterInventoryInstance(identity(src), instanceId, 'shops.stock')
     local ok = r and r.ok == true; if cb then cb(ok) end; return ok
 end
-function ShopsInventory:createWeapon(src, name)
+function ShopsInventory:createWeapon(src, name, characterId, requestId)
     local definitions = exports['feather-weapons']:initiate().Definitions.List('weapon')
     local definitionId
     for _, def in pairs(definitions and definitions.ok and definitions.value or {}) do
         if def.itemName:lower() == name:lower() then definitionId = def.id; break end
     end
-    local r = exports['feather-weapons']:IssueWeapon({ characterId = identity(src), definitionId = definitionId }, { reason = 'shops.purchase', actorSource = tonumber(src) })
+    -- Weapons accepts cross-resource issuance only for an allow-listed purpose and
+    -- requires a stable requestId (its idempotency key), so a replayed order
+    -- returns the weapon already issued instead of creating another one.
+    local r = exports['feather-weapons']:IssueWeapon({ characterId = characterId or identity(src), definitionId = definitionId,
+        purpose = 'purchase', requestId = requestId,
+        provenance = { type = 'shop_purchase', reference = requestId } },
+        { reason = 'shops.purchase', actorSource = tonumber(src) })
     if not r or not r.ok then error(r and r.code or 'weapon_issuance_failed') end
     return r.value.itemInstanceId
 end

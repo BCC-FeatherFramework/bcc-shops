@@ -475,7 +475,6 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditShop", function(params, cb, s
         shop_type     = params.shop_type,
         webhook_link  = params.webhook_link,
         inv_limit     = params.inv_limit,
-        ledger        = params.ledger,
         blip_hash     = params.blip_hash,
         show_blip     = params.show_blip,
         npc_model     = params.npc_model,

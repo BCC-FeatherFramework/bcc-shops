@@ -1,3 +1,27 @@
+-- Keep the same purchase ID after a lost RPC response or resource restart.
+function BeginShopPayment(shopName, itemName, quantity, weapon)
+    local key = 'bcc-shops:purchase:' .. json.encode({ shopName, itemName, quantity, weapon == true })
+    local id = GetResourceKvpString(key)
+    if not id then
+        id = ('%08x%08x%08x%08x'):format(math.random(0, 0x7fffffff), math.random(0, 0x7fffffff),
+            math.random(0, 0x7fffffff), math.random(0, 0x7fffffff))
+        SetResourceKvp(key, id)
+    end
+    return id, key
+end
+
+function FinishShopPayment(key, requestId, success, result)
+    -- A timeout/pending/uncertain response must retain the original payment key.
+    local terminal = { purchase_rejected = true, invalid_input = true, invalid_price = true,
+        catalog_unavailable = true, offer_changed = true, insufficient_stock = true,
+        insufficient_funds = true, inventory_full = true, not_at_shop = true, level_required = true,
+        authorization_denied = true, shop_accounts_unsupported = true, invalid_currency = true }
+    if GetResourceKvpString(key) == requestId
+        and (success == true or (type(result) == 'table' and terminal[result.code])) then
+        DeleteResourceKvp(key)
+    end
+end
+
 -- Toolkit wrappers preserve BCC's world entity handles and cleanup methods.
 ShopsToolkit = { Prompts = {}, Blips = {}, Ped = {} }
 local toolkit = exports['feather-toolkit']

@@ -26,7 +26,7 @@ client_scripts {
 }
 
 server_scripts {
-    '@oxmysql/lib/MySQL.lua',
+    '@feather-mysql/lib/MySQL.lua',
     'server/feather/init.lua',
     'server/dbupdater.lua',
 	'server/main.lua',
@@ -39,7 +39,7 @@ files {
 }
 
 dependencies {
-    'oxmysql',
+    'feather-mysql',
     'feather-core',
     'feather-character',
     'feather-roles',
@@ -48,5 +48,5 @@ dependencies {
     'feather-toolkit',
     'feather-notify',
     'feather-menu-v2',
-    'bcc-banks'
+    'feather-economy'
 }
