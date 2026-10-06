@@ -17,7 +17,7 @@ RegisterCommand('BccShopsEconomyStatus', function(source)
     print('[bcc-shops] Transfer permission is checked by Economy when posting; this diagnostic moves no money.')
     print('[bcc-shops] Player shops, sales, ledger changes and NPC customers: blocked (shop accounts unsupported).')
     if ShopsPaymentSchemaReady then
-        local states = MySQL.query.await('SELECT state, COUNT(*) AS total FROM bcc_shop_payments GROUP BY state') or {}
+        local states = DB.query('SELECT state, COUNT(*) AS total FROM bcc_shop_payments GROUP BY state') or {}
         for _, row in ipairs(states) do
             print(('[bcc-shops] purchase state=%s count=%s'):format(row.state, row.total))
         end

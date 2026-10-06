@@ -9,9 +9,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:GiveAccess", function(params, cb,
     end
 
     -- Check if access already exists
-    local existingAccess = MySQL.query.await(
+    local existingAccess = DB.query(
         'SELECT 1 FROM bcc_shop_access WHERE shop_id = ? AND character_id = ? LIMIT 1',
-        { shopId, characterId }
+        shopId, characterId
     )
 
     if existingAccess and #existingAccess > 0 then
@@ -21,16 +21,16 @@ exports['feather-core']:RegisterRPC("bcc-shops:GiveAccess", function(params, cb,
     end
 
     -- Insert new access
-    local result = MySQL.insert.await(
+    local result = DB.insert(
         'INSERT INTO bcc_shop_access (shop_id, character_id) VALUES (?, ?)',
-        { shopId, characterId }
+        shopId, characterId
     )
 
     local success = result ~= nil
     devPrint("Access granted to character " .. characterId .. " for shop ID " .. shopId .. ": " .. tostring(success))
 
     -- Get shop info (webhook + name)
-    local shopResult = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopResult = DB.query('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', shopId)
     local shopInfo = shopResult and shopResult[1] or nil
 
     if not shopInfo then
@@ -42,8 +42,8 @@ exports['feather-core']:RegisterRPC("bcc-shops:GiveAccess", function(params, cb,
     local shopName = shopInfo.shop_name or "Unknown"
 
     -- Fetch character name from DB
-    local charResult = MySQL.query.await('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
-        { characterId })
+    local charResult = DB.query('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
+        characterId)
     local character = charResult and charResult[1] or { firstname = "Unknown", lastname = "Unknown" }
 
     -- Send to shop-specific webhook
@@ -105,8 +105,8 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveAccess", function(params, c
     end
 
     -- Get character info directly from DB (in case they're offline)
-    local charResult = MySQL.query.await('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
-        { characterId })
+    local charResult = DB.query('SELECT first_name AS firstname, last_name AS lastname FROM character_profiles WHERE character_id = ?',
+        characterId)
     local firstname = "Unknown"
     local lastname = ""
 
@@ -118,7 +118,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveAccess", function(params, c
     end
 
     -- Get shop info for webhook
-    local result = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local result = DB.query('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', shopId)
     local shopInfo = result and result[1] or nil
 
     if not shopInfo then
@@ -130,9 +130,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveAccess", function(params, c
     local shopName = shopInfo.shop_name or "Unknown"
 
     -- Perform deletion
-    local rowsChanged = MySQL.update.await('DELETE FROM bcc_shop_access WHERE shop_id = ? AND character_id = ?', {
+    local rowsChanged = DB.exec('DELETE FROM bcc_shop_access WHERE shop_id = ? AND character_id = ?',
         shopId, characterId
-    })
+    )
 
     local success = rowsChanged and rowsChanged > 0
     devPrint("Access removed for character " .. characterId .. " from shop ID " .. shopId .. ": " .. tostring(success))
@@ -176,11 +176,10 @@ exports['feather-core']:RegisterRPC("bcc-shops:HasAccess", function(params, cb, 
 
     if not shopId or not characterId then return cb(false) end
 
-    MySQL.query('SELECT * FROM bcc_shop_access WHERE shop_id = ? AND character_id = ? LIMIT 1', {
+    local result = DB.query('SELECT * FROM bcc_shop_access WHERE shop_id = ? AND character_id = ? LIMIT 1',
         shopId, characterId
-    }, function(result)
-        cb(result and #result > 0)
-    end)
+    )
+    cb(result and #result > 0)
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:CheckStoreOwnership", function(params, cb, source)
@@ -201,39 +200,37 @@ exports['feather-core']:RegisterRPC("bcc-shops:CheckStoreOwnership", function(pa
 
     devPrint("Checking ownership for store: " .. storeName .. ", Character ID: " .. tostring(characterId))
 
-    MySQL.query('SELECT shop_id, owner_id FROM bcc_shops WHERE shop_name = ?', { storeName }, function(results)
-        if results and #results > 0 then
-            local shop = results[1]
-            local isOwner = shop.owner_id == characterId
-            local shopId = shop.shop_id
+    local results = DB.query('SELECT shop_id, owner_id FROM bcc_shops WHERE shop_name = ?', storeName)
+    if results and #results > 0 then
+        local shop = results[1]
+        local isOwner = shop.owner_id == characterId
+        local shopId = shop.shop_id
 
-            if isOwner then
-                devPrint("Player is the owner of store: " .. storeName)
-                return cb({
-                    isOwner = true,
-                    hasAccess = true,
-                    storeName = storeName
-                })
-            end
-
-            -- Not owner, check access table
-            MySQL.query('SELECT 1 FROM bcc_shop_access WHERE shop_id = ? AND character_id = ? LIMIT 1', {
-                shopId, tostring(characterId)
-            }, function(access)
-                local hasAccess = access and #access > 0
-                devPrint("Player has access to store: " .. tostring(hasAccess))
-
-                cb({
-                    isOwner = false,
-                    hasAccess = hasAccess,
-                    storeName = storeName
-                })
-            end)
-        else
-            devPrint("Store not found: " .. storeName)
-            cb({ isOwner = false, hasAccess = false, storeName = storeName })
+        if isOwner then
+            devPrint("Player is the owner of store: " .. storeName)
+            return cb({
+                isOwner = true,
+                hasAccess = true,
+                storeName = storeName
+            })
         end
-    end)
+
+        -- Not owner, check access table
+        local access = DB.query('SELECT 1 FROM bcc_shop_access WHERE shop_id = ? AND character_id = ? LIMIT 1',
+            shopId, tostring(characterId)
+        )
+        local hasAccess = access and #access > 0
+        devPrint("Player has access to store: " .. tostring(hasAccess))
+
+        cb({
+            isOwner = false,
+            hasAccess = hasAccess,
+            storeName = storeName
+        })
+    else
+        devPrint("Store not found: " .. storeName)
+        cb({ isOwner = false, hasAccess = false, storeName = storeName })
+    end
 end)
 
 

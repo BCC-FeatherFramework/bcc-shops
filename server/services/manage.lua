@@ -21,7 +21,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:createNPCStore", function(params,
     local defaultBlipHash = Config.DefaultBlipHash
     local defaultModel = Config.DefaultNPCModel
 
-    MySQL.insert(insertQuery, {
+    local result = DB.insert(insertQuery,
         nil,
         params.shopName,
         params.shopLocation,
@@ -36,33 +36,32 @@ exports['feather-core']:RegisterRPC("bcc-shops:createNPCStore", function(params,
         params.posZ,
         params.posHeading,
         params.npcModel or defaultModel
-    }, function(result)
-        if result then
-            devPrint("NPC Shop created: " .. params.shopName)
+    )
+    if result then
+        devPrint("NPC Shop created: " .. params.shopName)
 
-            -- Send Discord log
-            local embed = {{
-                color = 5763719,
-                title = "🏪 NPC Shop Created",
-                description = table.concat({
-                    "**Shop Name:** `" .. params.shopName .. "`",
-                    "**Location:** `" .. params.shopLocation .. "`",
-                    "**Position:** " .. string.format("`%.2f, %.2f, %.2f`", params.posX, params.posY, params.posZ),
-                    "**Created By:** `" .. firstName .. " " .. lastName .. "`",
-                    "**Char ID:** `" .. tostring(charId) .. "`"
-                }, "\n")
-            }}
-            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Created", nil, embed)
+        -- Send Discord log
+        local embed = {{
+            color = 5763719,
+            title = "🏪 NPC Shop Created",
+            description = table.concat({
+                "**Shop Name:** `" .. params.shopName .. "`",
+                "**Location:** `" .. params.shopLocation .. "`",
+                "**Position:** " .. string.format("`%.2f, %.2f, %.2f`", params.posX, params.posY, params.posZ),
+                "**Created By:** `" .. firstName .. " " .. lastName .. "`",
+                "**Char ID:** `" .. tostring(charId) .. "`"
+            }, "\n")
+        }}
+        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "NPC Shop Created", nil, embed)
 
-            NotifyClient(source, _U('shopCreatedSuccess'), "success")
-            exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
-            cb(true)
-        else
-            devPrint("Failed to create NPC shop.")
-            NotifyClient(source, _U('shopCreatedFail'), "error")
-            cb(false)
-        end
-    end)
+        NotifyClient(source, _U('shopCreatedSuccess'), "success")
+        exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
+        cb(true)
+    else
+        devPrint("Failed to create NPC shop.")
+        NotifyClient(source, _U('shopCreatedFail'), "error")
+        cb(false)
+    end
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:createplayershop", function(params, cb, source)
@@ -95,41 +94,40 @@ exports['feather-core']:RegisterRPC("bcc-shops:createplayershop", function(param
     local invLimit = params.invLimit or 0
     local shopLocation = params.storeLocation or shopType
 
-    MySQL.insert([[
+    local inserted = DB.insert([[
         INSERT INTO bcc_shops (
             owner_id, shop_name, pos_x, pos_y, pos_z, pos_heading,
             shop_type, blip_hash, ledger, inv_limit, is_npc_shop, shop_location, npc_model
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], {
+    ]],
         charId, params.shopName,
         pos_x, pos_y, pos_z, heading,
         shopType, blipHash, 0, invLimit, 0, shopLocation,
         Config.DefaultNPCModel
-    }, function(inserted)
-        if inserted then
-            devPrint("Player Shop created: " .. params.shopName)
+    )
+    if inserted then
+        devPrint("Player Shop created: " .. params.shopName)
 
-            -- Send Discord log
-            local embed = {{
-                color = 65280,
-                title = "🏪 Player Shop Created",
-                description = table.concat({
-                    "**Shop Name:** `" .. params.shopName .. "`",
-                    "**Location:** `" .. shopLocation .. "`",
-                    "**Position:** " .. string.format("`%.2f, %.2f, %.2f`", pos_x, pos_y, pos_z),
-                    "**Created By:** `" .. firstName .. " " .. lastName .. "`",
-                    "**Char ID:** `" .. tostring(charId) .. "`"
-                }, "\n")
-            }}
-            ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Created", nil, embed)
+        -- Send Discord log
+        local embed = {{
+            color = 65280,
+            title = "🏪 Player Shop Created",
+            description = table.concat({
+                "**Shop Name:** `" .. params.shopName .. "`",
+                "**Location:** `" .. shopLocation .. "`",
+                "**Position:** " .. string.format("`%.2f, %.2f, %.2f`", pos_x, pos_y, pos_z),
+                "**Created By:** `" .. firstName .. " " .. lastName .. "`",
+                "**Char ID:** `" .. tostring(charId) .. "`"
+            }, "\n")
+        }}
+        ShopsToolkit.Discord.sendMessage(Config.Webhook, Config.WebhookTitle, Config.WebhookAvatar, "Player Shop Created", nil, embed)
 
-            exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
-            cb(true)
-        else
-            devPrint("Failed to create player shop.")
-            cb(false)
-        end
-    end)
+        exports['feather-core']:NotifyRPC("bcc-shops:RefreshStoreData", {}, source)
+        cb(true)
+    else
+        devPrint("Failed to create player shop.")
+        cb(false)
+    end
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:deleteNPCShop", function(params, cb, src)
@@ -152,19 +150,19 @@ exports['feather-core']:RegisterRPC("bcc-shops:deleteNPCShop", function(params, 
     local lastName = char and char.lastName or "unknown"
 
     -- Fetch shop data
-    local shopData = MySQL.query.await('SELECT shop_name, shop_location FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopData = DB.query('SELECT shop_name, shop_location FROM bcc_shops WHERE shop_id = ?', shopId)
     local shopName = shopData[1] and shopData[1].shop_name or "Unknown"
     local shopLocation = shopData[1] and shopData[1].shop_location or "Unknown"
 
     -- Delete items
-    local itemDeleteResult = MySQL.update.await('DELETE FROM bcc_shop_items WHERE shop_id = ?', { shopId })
+    local itemDeleteResult = DB.exec('DELETE FROM bcc_shop_items WHERE shop_id = ?', shopId)
     devPrint("Deleted " .. tostring(itemDeleteResult or 0) .. " regular items")
 
-    local weaponDeleteResult = MySQL.update.await('DELETE FROM bcc_shop_weapon_items WHERE shop_id = ?', { shopId })
+    local weaponDeleteResult = DB.exec('DELETE FROM bcc_shop_weapon_items WHERE shop_id = ?', shopId)
     devPrint("Deleted " .. tostring(weaponDeleteResult or 0) .. " weapon items")
 
     -- Delete shop
-    local shopDeleteResult = MySQL.update.await('DELETE FROM bcc_shops WHERE shop_id = ? AND is_npc_shop = 1', { shopId })
+    local shopDeleteResult = DB.exec('DELETE FROM bcc_shops WHERE shop_id = ? AND is_npc_shop = 1', shopId)
     if not shopDeleteResult or shopDeleteResult <= 0 then
         devPrint("Failed to delete shop with shopId: " .. tostring(shopId))
         NotifyClient(src, _U("npcstore_delete_failed"), "error")
@@ -215,20 +213,20 @@ exports['feather-core']:RegisterRPC("bcc-shops:deletePlayerShop", function(param
     local lastName = char and char.lastName or "unknown"
 
     -- Fetch shop data
-    local shopData = MySQL.query.await('SELECT shop_name, shop_location, owner_id FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopData = DB.query('SELECT shop_name, shop_location, owner_id FROM bcc_shops WHERE shop_id = ?', shopId)
     local shopName = shopData[1] and shopData[1].shop_name or "Unknown"
     local shopLocation = shopData[1] and shopData[1].shop_location or "Unknown"
     local ownerId = shopData[1] and shopData[1].owner_id or "Unknown"
 
     -- Delete items
-    local itemDeleteResult = MySQL.update.await('DELETE FROM bcc_shop_items WHERE shop_id = ?', { shopId })
+    local itemDeleteResult = DB.exec('DELETE FROM bcc_shop_items WHERE shop_id = ?', shopId)
     devPrint("Deleted " .. tostring(itemDeleteResult or 0) .. " regular items")
 
-    local weaponDeleteResult = MySQL.update.await('DELETE FROM bcc_shop_weapon_items WHERE shop_id = ?', { shopId })
+    local weaponDeleteResult = DB.exec('DELETE FROM bcc_shop_weapon_items WHERE shop_id = ?', shopId)
     devPrint("Deleted " .. tostring(weaponDeleteResult or 0) .. " weapon items")
 
     -- Delete shop
-    local shopDeleteResult = MySQL.update.await('DELETE FROM bcc_shops WHERE shop_id = ? AND owner_id IS NOT NULL', { shopId })
+    local shopDeleteResult = DB.exec('DELETE FROM bcc_shops WHERE shop_id = ? AND owner_id IS NOT NULL', shopId)
     if not shopDeleteResult or shopDeleteResult <= 0 then
         devPrint("Failed to delete player shop with shopId: " .. tostring(shopId))
         NotifyClient(src, _U("playerstore_delete_failed"), "error")
@@ -271,12 +269,11 @@ function manageStores(source, isAdmin)
                 table.insert(playerList, { id = playerId, name = profile.firstName .. ' ' .. profile.lastName })
             end
         end
-        MySQL.query('SELECT * FROM bcc_shops', {}, function(shops)
-            exports['feather-core']:NotifyRPC("bcc-shops:OpenManageStoresUI", {
-                shops = shops,
-                players = playerList
-            }, source)
-        end)
+        local shops = DB.query('SELECT * FROM bcc_shops')
+        exports['feather-core']:NotifyRPC("bcc-shops:OpenManageStoresUI", {
+            shops = shops,
+            players = playerList
+        }, source)
     else
         ShopsCore.Notify(source, 'You do not have permission to use this command!', 3000)
     end
@@ -343,9 +340,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:SetPlayerShopBlip", function(para
     end
 
     local characterId = Character.characterId
-    local affectedRows = MySQL.update.await(
+    local affectedRows = DB.exec(
         "UPDATE bcc_shops SET blip_hash = ? WHERE shop_name = ? AND owner_id = ?",
-        { blipHash, shopName, characterId }
+        blipHash, shopName, characterId
     )
 
     if affectedRows and affectedRows > 0 then
@@ -368,9 +365,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:SetShopBlipEnabled", function(par
         return cb(false)
     end
 
-    local affected = MySQL.update.await(
+    local affected = DB.exec(
         "UPDATE bcc_shops SET show_blip = ? WHERE shop_name = ?",
-        { enabled and 1 or 0, shopName }
+        enabled and 1 or 0, shopName
     )
 
     if affected > 0 then
@@ -388,7 +385,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:CreateCategory", function(params,
     if not params or not params.name then return cb(false) end
 
     local label   = (params.label and params.label:match("%S")) and params.label or params.name
-    local result = MySQL.insert.await("INSERT INTO bcc_shop_categories (name, label) VALUES (?, ?)", { params.name, label })
+    local result = DB.insert("INSERT INTO bcc_shop_categories (name, label) VALUES (?, ?)", params.name, label)
     cb(result ~= nil)
 end)
 
@@ -398,7 +395,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditCategory", function(params, c
     if not params or not params.id or not params.name then return cb(false) end
 
     local label   = (params.label and params.label:match("%S")) and params.label or params.name
-    local updated = MySQL.update.await("UPDATE bcc_shop_categories SET name = ?, label = ? WHERE id = ?", { params.name, label, params.id })
+    local updated = DB.exec("UPDATE bcc_shop_categories SET name = ?, label = ? WHERE id = ?", params.name, label, params.id)
     cb(updated and updated > 0)
 end)
 
@@ -417,8 +414,8 @@ exports['feather-core']:RegisterRPC("bcc-shops:DeleteCategory", function(params,
     end
 
     -- Check references before attempting delete
-    local inUseItems   = MySQL.scalar.await("SELECT COUNT(*) FROM bcc_shop_items WHERE category_id = ?", { categoryId }) or 0
-    local inUseWeapons = MySQL.scalar.await("SELECT COUNT(*) FROM bcc_shop_weapon_items WHERE category_id = ?", { categoryId }) or 0
+    local inUseItems   = DB.value("SELECT COUNT(*) FROM bcc_shop_items WHERE category_id = ?", categoryId) or 0
+    local inUseWeapons = DB.value("SELECT COUNT(*) FROM bcc_shop_weapon_items WHERE category_id = ?", categoryId) or 0
 
     if (inUseItems + inUseWeapons) > 0 then
         local msg = ("Category is in use: " .. inUseItems .. " item(s), " .. inUseWeapons .. " weapon(s). Remove or reassign them first.")
@@ -428,7 +425,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:DeleteCategory", function(params,
 
     -- Safe to delete
     local ok, resOrErr = pcall(function()
-        return MySQL.update.await("DELETE FROM bcc_shop_categories WHERE id = ?", { categoryId })
+        return DB.exec("DELETE FROM bcc_shop_categories WHERE id = ?", categoryId)
     end)
 
     if not ok then
@@ -449,7 +446,7 @@ end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:GetAllCategories", function(_, cb, src)
     local _U = ShopTranslator(src)
-    local categories = MySQL.query.await("SELECT id, name, label FROM bcc_shop_categories ORDER BY label ASC")
+    local categories = DB.query("SELECT id, name, label FROM bcc_shop_categories ORDER BY label ASC")
     cb(categories or {})
 end)
 
@@ -500,7 +497,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditShop", function(params, cb, s
 
     local sql = "UPDATE bcc_shops SET " .. table.concat(updateFields, ", ") .. " WHERE shop_id = ?"
 
-    local success = MySQL.update.await(sql, updateValues) > 0
+    local success = DB.exec(sql, table.unpack(updateValues)) > 0
     devPrint("Shop update result for ID " .. shopId .. ": " .. tostring(success))
     cb(success)
 end)

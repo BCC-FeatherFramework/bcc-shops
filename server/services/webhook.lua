@@ -16,22 +16,19 @@ exports['feather-core']:RegisterRPC("bcc-shops:SetWebhook", function(params, cb,
     end
 
     -- Confirm ownership
-    MySQL.query('SELECT owner_id FROM bcc_shops WHERE shop_id = ?', { shopId }, function(results)
-        if not results or #results == 0 then
-            devPrint("Shop not found with ID: " .. tostring(shopId))
-            return cb(false)
-        end
+    local results = DB.query('SELECT owner_id FROM bcc_shops WHERE shop_id = ?', shopId)
+    if not results or #results == 0 then
+        devPrint("Shop not found with ID: " .. tostring(shopId))
+        return cb(false)
+    end
 
-        if results[1].owner_id ~= characterId then
-            devPrint("Unauthorized attempt to set webhook. Char: " .. characterId .. ", Owner: " .. results[1].owner_id)
-            return cb(false)
-        end
+    if results[1].owner_id ~= characterId then
+        devPrint("Unauthorized attempt to set webhook. Char: " .. characterId .. ", Owner: " .. results[1].owner_id)
+        return cb(false)
+    end
 
-        MySQL.update('UPDATE bcc_shops SET webhook_link = ? WHERE shop_id = ?', { webhook, shopId },
-            function(rowsChanged)
-                cb(rowsChanged > 0)
-            end)
-    end)
+    local rowsChanged = DB.exec('UPDATE bcc_shops SET webhook_link = ? WHERE shop_id = ?', webhook, shopId)
+    cb(rowsChanged > 0)
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:GetShopWebhook", function(params, cb, source)
@@ -40,7 +37,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopWebhook", function(params,
     local shopId = params.shopId
     if not shopId then return cb(nil) end
 
-    local result = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local result = DB.query('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', shopId)
 
     if result and result[1] then
         return cb({
