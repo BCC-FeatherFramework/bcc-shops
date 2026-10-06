@@ -5,7 +5,7 @@ local function getAllPlayerShops()
     if type(FetchAllPlayerShops) == "function" then
         return FetchAllPlayerShops() or {}
     end
-    local result = MySQL.query.await('SELECT shop_id, shop_name, pos_x, pos_y, pos_z FROM bcc_shops WHERE owner_id IS NOT NULL', {})
+    local result = DB.query('SELECT shop_id, shop_name, pos_x, pos_y, pos_z FROM bcc_shops WHERE owner_id IS NOT NULL')
     return result or {}
 end
 
@@ -17,11 +17,11 @@ end
 local function fetchAvailableStock(shopId)
     local items = {}
 
-    local itemRows = MySQL.query.await([[ 
-        SELECT item_name AS name, item_label AS label, buy_price, buy_quantity 
-        FROM bcc_shop_items 
+    local itemRows = DB.query([[
+        SELECT item_name AS name, item_label AS label, buy_price, buy_quantity
+        FROM bcc_shop_items
         WHERE shop_id = ? AND buy_quantity > 0
-    ]], { shopId }) or {}
+    ]], shopId) or {}
 
     for _, row in ipairs(itemRows) do
         table.insert(items, {
@@ -33,11 +33,11 @@ local function fetchAvailableStock(shopId)
         })
     end
 
-    local weaponRows = MySQL.query.await([[ 
-        SELECT weapon_name AS name, weapon_label AS label, buy_price, buy_quantity 
-        FROM bcc_shop_weapon_items 
+    local weaponRows = DB.query([[
+        SELECT weapon_name AS name, weapon_label AS label, buy_price, buy_quantity
+        FROM bcc_shop_weapon_items
         WHERE shop_id = ? AND buy_quantity > 0
-    ]], { shopId }) or {}
+    ]], shopId) or {}
 
     for _, row in ipairs(weaponRows) do
         table.insert(items, {
@@ -53,7 +53,7 @@ local function fetchAvailableStock(shopId)
 end
 
 local function sendWebhook(shopId, shopName, label, name, qty, total, isWeapon)
-    local shopInfo = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopInfo = DB.query('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', shopId)
     local info = (shopInfo and shopInfo[1]) or {}
     local webhook = info.webhook_link -- may be nil
     local finalName = info.shop_name or shopName or "Unknown"
@@ -107,7 +107,7 @@ CreateThread(function()
             else
                 local shop = pickRandom(shops)
                 local shopName = shop.shop_name
-                local shopId = shop.shop_id or MySQL.scalar.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL', { shopName })
+                local shopId = shop.shop_id or DB.value('SELECT shop_id FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL', shopName)
 
                 if not shopId then
                     devPrint("[NPC AutoBuy] Could not resolve shop_id for " .. tostring(shopName))

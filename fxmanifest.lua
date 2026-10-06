@@ -26,7 +26,7 @@ client_scripts {
 }
 
 server_scripts {
-    '@feather-mysql/lib/MySQL.lua',
+    '@feather-mysql/lib/DB.lua',
     'server/feather/init.lua',
     'server/dbupdater.lua',
 	'server/main.lua',
@@ -42,7 +42,7 @@ dependencies {
     'feather-mysql',
     'feather-core',
     'feather-character',
-    'feather-roles',
+    'feather-authority',
     'feather-inventory',
     'feather-weapons',
     'feather-toolkit',

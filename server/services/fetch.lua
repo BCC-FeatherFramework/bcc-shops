@@ -13,7 +13,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchNPCInventory", function(para
 end)
 
 function FetchAllPlayerShops()
-    local result = MySQL.query.await('SELECT shop_name, pos_x, pos_y, pos_z FROM bcc_shops WHERE is_npc_shop = 0', {})
+    local result = DB.query('SELECT shop_name, pos_x, pos_y, pos_z FROM bcc_shops WHERE is_npc_shop = 0')
     return result or {}
 end
 
@@ -80,10 +80,10 @@ exports['feather-core']:RegisterRPC("bcc-shops:fetchPlayerStoreInfo", function(p
 
     local charId = character.characterId
 
-    local storeResult = MySQL.query.await(
-        'SELECT shop_id, inv_limit, ledger, owner_id FROM bcc_shops WHERE shop_name = ?', {
+    local storeResult = DB.query(
+        'SELECT shop_id, inv_limit, ledger, owner_id FROM bcc_shops WHERE shop_name = ?',
             shopName
-        })
+        )
 
     if not storeResult or #storeResult == 0 then
         devPrint("No store found with shop name: " .. tostring(shopName))
@@ -109,9 +109,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:fetchPlayerStoreInfo", function(p
         })
     end
 
-    local accessResult = MySQL.query.await('SELECT 1 FROM bcc_shop_access WHERE shop_id = ? AND character_id = ?', {
+    local accessResult = DB.query('SELECT 1 FROM bcc_shop_access WHERE shop_id = ? AND character_id = ?',
         shopId, tostring(charId)
-    })
+    )
 
     local hasAccess = accessResult and #accessResult > 0
     devPrint("Access check result for charId " .. tostring(charId) .. ": " .. tostring(hasAccess))
@@ -136,7 +136,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
     local shopName = params.shopName
 
     -- Step 1: Fetch Shop ID
-    local shopId = MySQL.scalar.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName })
+    local shopId = DB.value('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', shopName)
     if not shopId then
         devPrint("Shop not found: " .. tostring(shopName))
         return cb({ items = {}, weapons = {}, shopName = shopName })
@@ -149,7 +149,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
     }
 
     -- Step 2: Fetch Items with category name from join
-    local itemRows = MySQL.query.await([[
+    local itemRows = DB.query([[
         SELECT i.item_id, i.item_label, i.item_name, i.currency_type,
                i.buy_price, i.sell_price, i.level_required,
                i.item_quantity, i.buy_quantity, i.sell_quantity,
@@ -157,7 +157,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
         FROM bcc_shop_items i
         LEFT JOIN bcc_shop_categories c ON i.category_id = c.id
         WHERE i.shop_id = ?
-    ]], { shopId })
+    ]], shopId)
 
     for _, item in ipairs(itemRows or {}) do
         local category = item.category_name or "uncategorized"
@@ -179,7 +179,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
     end
 
     -- Step 3: Fetch Weapons with category name from join
-    local weaponRows = MySQL.query.await([[
+    local weaponRows = DB.query([[
         SELECT w.weapon_id, w.weapon_label, w.weapon_name, w.currency_type,
                w.buy_price, w.sell_price, w.level_required,
                w.item_quantity, w.buy_quantity, w.sell_quantity,
@@ -188,7 +188,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
         FROM bcc_shop_weapon_items w
         LEFT JOIN bcc_shop_categories c ON w.category_id = c.id
         WHERE w.shop_id = ?
-    ]], { shopId })
+    ]], shopId)
 
     for _, weapon in ipairs(weaponRows or {}) do
         local category = weapon.category_name or "uncategorized"
@@ -217,7 +217,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchShopItems", function(params,
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:GetShopCategories", function(_, cb)
-    local result = MySQL.query.await([[
+    local result = DB.query([[
         SELECT id, name, label FROM bcc_shop_categories ORDER BY label ASC
     ]])
 
@@ -237,7 +237,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, c
     local _U = ShopTranslator(src)
     local shopName = params.shopName
 
-    local rows = MySQL.query.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName })
+    local rows = DB.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', shopName)
     if not rows or not rows[1] then
         devPrint("Shop not found: " .. tostring(shopName))
         return cb({ items = {}, weapons = {} })
@@ -250,7 +250,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, c
     }
 
     -- Fetch Items
-    local itemRows = MySQL.query.await([[
+    local itemRows = DB.query([[
         SELECT i.item_id, i.item_label, i.item_name, i.currency_type,
                i.buy_price, i.sell_price, i.level_required,
                i.item_quantity, i.buy_quantity, i.sell_quantity,
@@ -258,7 +258,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, c
         FROM bcc_shop_items i
         LEFT JOIN bcc_shop_categories c ON i.category_id = c.id
         WHERE i.shop_id = ?
-    ]], { shopId })
+    ]], shopId)
 
     for _, row in ipairs(itemRows or {}) do
         local categoryId = row.category_id or 0
@@ -279,7 +279,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, c
     end
 
     -- Fetch Weapons
-    local weaponRows = MySQL.query.await([[
+    local weaponRows = DB.query([[
         SELECT w.weapon_id, w.weapon_label, w.weapon_name, w.currency_type,
                w.buy_price, w.sell_price, w.level_required,
                w.item_quantity, w.buy_quantity, w.sell_quantity,
@@ -288,7 +288,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetShopItems", function(params, c
         FROM bcc_shop_weapon_items w
         LEFT JOIN bcc_shop_categories c ON w.category_id = c.id
         WHERE w.shop_id = ?
-    ]], { shopId })
+    ]], shopId)
 
     for _, row in ipairs(weaponRows or {}) do
         local categoryId = row.category_id or 0
@@ -316,7 +316,7 @@ end)
 exports['feather-core']:RegisterRPC("bcc-shops:FetchPlayerShops", function(_, cb, src)
     local _U = ShopTranslator(src)
     local query = 'SELECT * FROM bcc_shops WHERE owner_id IS NOT NULL'
-    local result = MySQL.query.await(query, {})
+    local result = DB.query(query)
 
     if result and #result > 0 then
         for _, store in ipairs(result) do
@@ -332,7 +332,7 @@ end)
 exports['feather-core']:RegisterRPC("bcc-shops:FetchNPCShops", function(_, cb, src)
     local _U = ShopTranslator(src)
     local query = 'SELECT * FROM bcc_shops WHERE is_npc_shop = 1'
-    local result = MySQL.query.await(query, {})
+    local result = DB.query(query)
 
     if result and #result > 0 then
         for _, shop in ipairs(result) do
@@ -350,13 +350,13 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetAccessList", function(params, 
     local shopName = params.shopName
     if not shopName then return cb(nil) end
 
-    local shopResult = MySQL.query.await("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", { shopName })
+    local shopResult = DB.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", shopName)
     if not shopResult or not shopResult[1] then
         return cb(nil)
     end
 
     local shopId = shopResult[1].shop_id
-    local accessList = MySQL.query.await("SELECT character_id FROM bcc_shop_access WHERE shop_id = ?", { shopId })
+    local accessList = DB.query("SELECT character_id FROM bcc_shop_access WHERE shop_id = ?", shopId)
 
     local results = {}
 
@@ -406,22 +406,20 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetItemsForShop", function(data, 
         return cb(false, "[ERROR] Shop name is required.")
     end
 
-    MySQL.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            return cb(false, "Shop not found.")
-        end
+    local shopResults = DB.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", shopName)
+    if not shopResults or #shopResults == 0 then
+        return cb(false, "Shop not found.")
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        -- Fetch items
-        MySQL.query("SELECT * FROM bcc_shop_items WHERE shop_id = ?", { shopId }, function(itemResults)
-            itemResults = itemResults or {}
+    -- Fetch items
+    local itemResults = DB.query("SELECT * FROM bcc_shop_items WHERE shop_id = ?", shopId) or {}
 
-            -- Fetch weapons
-            MySQL.query("SELECT * FROM bcc_shop_weapon_items WHERE shop_id = ?", { shopId }, function(weaponResults)
-                weaponResults = weaponResults or {}
+    -- Fetch weapons
+    local weaponResults = DB.query("SELECT * FROM bcc_shop_weapon_items WHERE shop_id = ?", shopId) or {}
 
-                local combined = {}
+    local combined = {}
 
                 -- Push items as-is + is_weapon = 0
                 for _, it in ipairs(itemResults) do
@@ -464,15 +462,12 @@ exports['feather-core']:RegisterRPC("bcc-shops:GetItemsForShop", function(data, 
                     })
                 end
 
-                if #combined == 0 then
-                    NotifyClient(src, _U("shop_no_items_found"), "warning", 4000)
-                    return cb(false, "No items or weapons found.")
-                end
+    if #combined == 0 then
+        NotifyClient(src, _U("shop_no_items_found"), "warning", 4000)
+        return cb(false, "No items or weapons found.")
+    end
 
-                cb(true, combined)
-            end)
-        end)
-    end)
+    cb(true, combined)
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:FetchWeaponItems", function(params, cb, src)
@@ -484,21 +479,19 @@ exports['feather-core']:RegisterRPC("bcc-shops:FetchWeaponItems", function(param
         return
     end
 
-    MySQL.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            cb(false, "Shop not found.")
-            return
-        end
+    local shopResults = DB.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', shopName)
+    if not shopResults or #shopResults == 0 then
+        cb(false, "Shop not found.")
+        return
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        MySQL.query('SELECT * FROM bcc_shop_weapon_items WHERE shop_id = ?', { shopId }, function(weaponResults)
-            if not weaponResults or #weaponResults == 0 then
-                cb({})
-                return
-            end
+    local weaponResults = DB.query('SELECT * FROM bcc_shop_weapon_items WHERE shop_id = ?', shopId)
+    if not weaponResults or #weaponResults == 0 then
+        cb({})
+        return
+    end
 
-            cb(weaponResults)
-        end)
-    end)
+    cb(weaponResults)
 end)

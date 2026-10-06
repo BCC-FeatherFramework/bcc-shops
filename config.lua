@@ -4,7 +4,7 @@ Config = {
         access = 0x760A9C6F, -- [G] Access Player menu
     },
     devMode = false,
-    ManagementRoles = { 'admin', 'owner', 'moderator' }, -- Feather character role keys.
+    ManagementRoles = { 'admin', 'owner', 'moderator' }, -- Feather Admin staff tiers (from Feather Authority).
     DefaultPlayerXP = 0, -- Replace with your progression service when available.
     Payments = {
         maximumQuantity = 100,

@@ -1,7 +1,7 @@
 ShopsPaymentSchemaReady = false
 CreateThread(function()
     -- Workflow receipts only. Authoritative monetary balances stay in Economy.
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shop_payments (
             order_id CHAR(36) NOT NULL PRIMARY KEY,
             buyer_character_id CHAR(36) NOT NULL,
@@ -21,7 +21,7 @@ CreateThread(function()
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
     ]])
     -- bcc_shops table
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shops (
             shop_id INT(11) NOT NULL AUTO_INCREMENT,
             owner_id VARCHAR(36) DEFAULT NULL,
@@ -42,15 +42,15 @@ CreateThread(function()
             PRIMARY KEY (shop_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
     ]])
-    MySQL.query.await([[
+    DB.exec([[
         ALTER TABLE bcc_shops
         ADD COLUMN IF NOT EXISTS show_blip TINYINT(1) NOT NULL DEFAULT 1 AFTER blip_hash;
     ]])
 
-    MySQL.query.await('ALTER TABLE bcc_shops MODIFY owner_id VARCHAR(36) DEFAULT NULL')
+    DB.exec('ALTER TABLE bcc_shops MODIFY owner_id VARCHAR(36) DEFAULT NULL')
 
     -- bcc_shop_access
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shop_access (
             id INT(11) NOT NULL AUTO_INCREMENT,
             shop_id INT(11) NOT NULL,
@@ -62,7 +62,7 @@ CreateThread(function()
     ]])
 
     -- bcc_shop_categories
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shop_categories (
             id INT(11) NOT NULL AUTO_INCREMENT,
             type ENUM('item', 'weapon') NOT NULL,
@@ -74,7 +74,7 @@ CreateThread(function()
     ]])
 
     -- bcc_shop_items
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shop_items (
             item_id INT(11) NOT NULL AUTO_INCREMENT,
             shop_id INT(11) NOT NULL,
@@ -97,7 +97,7 @@ CreateThread(function()
     ]])
 
     -- bcc_shop_weapon_items
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS bcc_shop_weapon_items (
             weapon_id INT(30) NOT NULL AUTO_INCREMENT,
             shop_id INT(30) NOT NULL,
@@ -122,10 +122,10 @@ CreateThread(function()
     ]])
 
     -- Insert default categories (only if table is empty)
-    local categoryCount = MySQL.scalar.await("SELECT COUNT(*) FROM bcc_shop_categories")
+    local categoryCount = DB.value("SELECT COUNT(*) FROM bcc_shop_categories")
 
     if categoryCount == 0 then
-        MySQL.query.await([[
+        DB.exec([[
         INSERT INTO bcc_shop_categories (type, name, label) VALUES
         ('item', 'herbs', 'Herbs'),
         ('item', 'oil', 'Oil'),

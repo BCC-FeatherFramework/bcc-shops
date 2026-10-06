@@ -36,10 +36,10 @@ function ShopsPayments.Quote(params, character, weapon)
     end
     local tableName = weapon and 'bcc_shop_weapon_items' or 'bcc_shop_items'
     local nameColumn = weapon and 'weapon_name' or 'item_name'
-    local rows = MySQL.query.await(('SELECT i.*, s.shop_name, s.is_npc_shop, s.owner_id, '
+    local rows = DB.query(('SELECT i.*, s.shop_name, s.is_npc_shop, s.owner_id, '
         .. 's.pos_x, s.pos_y, s.pos_z FROM %s i JOIN bcc_shops s ON s.shop_id = i.shop_id '
         .. 'WHERE s.shop_name = ? AND i.%s = ? LIMIT 2'):format(tableName, nameColumn),
-        { params.shopName, name }) or {}
+        params.shopName, name) or {}
     if #rows ~= 1 then return fail('catalog_unavailable', 'The shop offer is unavailable or ambiguous.') end
     local item = rows[1]
     if tonumber(item.is_npc_shop) ~= 1 or item.owner_id ~= nil then
@@ -83,7 +83,8 @@ end
 
 local function transaction(body)
     local result
-    local called, committed = pcall(MySQL.startTransaction, function(query)
+    local called, committed = pcall(DB.transaction, function(tx)
+        local function query(sql, params) return tx.raw(sql, table.unpack(params or {})) end
         result = body(query)
         return result and result.ok == true
     end)
@@ -93,8 +94,8 @@ local function transaction(body)
 end
 
 local function orderFor(characterId, requestId)
-    return MySQL.single.await('SELECT * FROM bcc_shop_payments WHERE buyer_character_id = ? AND request_id = ?',
-        { characterId, requestId })
+    return DB.one('SELECT * FROM bcc_shop_payments WHERE buyer_character_id = ? AND request_id = ?',
+        characterId, requestId)
 end
 
 local function stockInfo(weapon)
@@ -102,7 +103,7 @@ local function stockInfo(weapon)
 end
 
 local function reserve(quote, character, requestId, fingerprint)
-    local orderId = MySQL.scalar.await('SELECT UUID()')
+    local orderId = DB.value('SELECT UUID()')
     local tableName, idColumn = stockInfo(quote.weapon)
     local result = transaction(function(query)
         -- Lock the selected offer and recheck its price/owner before accepting intent.
@@ -195,8 +196,8 @@ local function purchase(params, character, weapon)
         if features.transfers ~= 1 or features.idempotency ~= 1 then
             return fail('unsupported_capability', 'Economy transfers and idempotency are required.')
         end
-        local pending = MySQL.scalar.await([[SELECT order_id FROM bcc_shop_payments WHERE buyer_character_id=?
-            AND state NOT IN ('fulfilled','rejected') LIMIT 1]], { character.characterId })
+        local pending = DB.value([[SELECT order_id FROM bcc_shop_payments WHERE buyer_character_id=?
+            AND state NOT IN ('fulfilled','rejected') LIMIT 1]], character.characterId)
         if pending then return fail('purchase_pending', 'An earlier purchase is still pending.') end
         local quoted = ShopsPayments.Quote(params, character, weapon)
         if not quoted.ok then return quoted end
@@ -241,7 +242,7 @@ local function purchase(params, character, weapon)
                 if not rejected.ok then return rejected end
                 return fail('purchase_rejected', 'Insufficient wallet funds.')
             end
-            MySQL.update.await('UPDATE bcc_shop_payments SET last_error=? WHERE order_id=?', { paid.code, order.order_id })
+            DB.exec('UPDATE bcc_shop_payments SET last_error=? WHERE order_id=?', paid.code, order.order_id)
             return fail('payment_pending', 'Payment is pending. Retry this same purchase.')
         end
         if type(paid.value) ~= 'table' or type(paid.value.transactionId) ~= 'string'
@@ -249,8 +250,8 @@ local function purchase(params, character, weapon)
             or paid.value.fromAccountId ~= quote.fromAccountId or paid.value.toAccountId ~= quote.toAccountId then
             return fail('payment_pending', 'The payment receipt needs reconciliation.')
         end
-        local saved = MySQL.update.await([[UPDATE bcc_shop_payments SET state='paid', payment_transaction_id=?,
-            last_error=NULL WHERE order_id=? AND state='payment_pending']], { paid.value.transactionId, order.order_id })
+        local saved = DB.exec([[UPDATE bcc_shop_payments SET state='paid', payment_transaction_id=?,
+            last_error=NULL WHERE order_id=? AND state='payment_pending']], paid.value.transactionId, order.order_id)
         if saved ~= 1 then return fail('purchase_pending', 'The payment receipt needs reconciliation.') end
         order.state, order.payment_transaction_id = 'paid', paid.value.transactionId
     end
@@ -265,8 +266,8 @@ local function purchase(params, character, weapon)
     end
     -- Commit intent before the non-idempotent Inventory/Weapons call. A restart
     -- here requires review, never blind re-granting or a fresh currency issuance.
-    local claimed = MySQL.update.await([[UPDATE bcc_shop_payments SET state='delivery_started'
-        WHERE order_id=? AND state='paid']], { order.order_id })
+    local claimed = DB.exec([[UPDATE bcc_shop_payments SET state='delivery_started'
+        WHERE order_id=? AND state='paid']], order.order_id)
     if claimed ~= 1 then return fail('delivery_review', 'Delivery is already in progress or needs review.') end
     local issuedInstances = {}
     local delivered = pcall(function()
@@ -280,12 +281,12 @@ local function purchase(params, character, weapon)
         ShopsInventory:addItem(character.source, quote.itemName, quote.quantity, character.characterId)
     end)
     if not delivered then
-        MySQL.update.await([[UPDATE bcc_shop_payments SET state='delivery_review', delivery_json=?,
-            last_error='inventory_delivery_failed' WHERE order_id=?]], { json.encode(issuedInstances), order.order_id })
+        DB.exec([[UPDATE bcc_shop_payments SET state='delivery_review', delivery_json=?,
+            last_error='inventory_delivery_failed' WHERE order_id=?]], json.encode(issuedInstances), order.order_id)
         return fail('delivery_review', 'Payment recorded; delivery needs staff review.')
     end
-    local saved = MySQL.update.await([[UPDATE bcc_shop_payments SET state='fulfilled', delivery_json=?, last_error=NULL
-        WHERE order_id=? AND state='delivery_started']], { json.encode(issuedInstances), order.order_id })
+    local saved = DB.exec([[UPDATE bcc_shop_payments SET state='fulfilled', delivery_json=?, last_error=NULL
+        WHERE order_id=? AND state='delivery_started']], json.encode(issuedInstances), order.order_id)
     if saved ~= 1 then return fail('delivery_review', 'Delivery receipt needs staff review.') end
     return receipt(order, quote, false)
 end

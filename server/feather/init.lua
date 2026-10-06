@@ -1,10 +1,37 @@
--- Management authority comes from the active character's Feather role.
+-- Management authority comes from the active character's Feather Admin staff
+-- tier in Feather Authority. Each tier is detected by one capability that only
+-- that tier and higher hold, checked highest first.
+local STAFF_TIERS = {
+    { key = 'owner', capability = 'staff.admin.roles.assignment.manage' },
+    { key = 'admin', capability = 'staff.admin.server.announce' },
+    { key = 'moderator', capability = 'staff.admin.menu.open' }
+}
+
+local function staffTierKey(characterId)
+    for _, tier in ipairs(STAFF_TIERS) do
+        local called, decision = pcall(function()
+            return exports['feather-authority']:Evaluate({
+                subjectType = 'character', subjectId = characterId,
+                capabilityKey = tier.capability, scopeType = 'server'
+            })
+        end)
+        if not called or type(decision) ~= 'table' or decision.ok ~= true
+            or type(decision.value) ~= 'table' then
+            return nil
+        end
+        if decision.value.allowed == true then return tier.key end
+    end
+    return 'player'
+end
+
 function CanManageShops(src)
-    local result = exports['feather-roles']:GetActorRole(tonumber(src))
-    if type(result) ~= 'table' or result.ok ~= true or type(result.value) ~= 'table'
-        or type(result.value.role) ~= 'table' then return false end
+    local session = exports['feather-core']:GetSessionContext(tonumber(src))
+    if type(session) ~= 'table' or session.ok ~= true or type(session.value) ~= 'table'
+        or not session.value.characterId then return false end
+    local tierKey = staffTierKey(session.value.characterId)
+    if not tierKey then return false end
     for _, key in ipairs(Config.ManagementRoles or { 'admin', 'owner', 'moderator' }) do
-        if result.value.role.key == key then return true end
+        if tierKey == key then return true end
     end
     return false
 end

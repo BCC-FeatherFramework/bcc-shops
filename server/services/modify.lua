@@ -18,9 +18,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseItem", function(params, c
         .total,
         "success")
 
-    local shopResult = MySQL.query.await(
+    local shopResult = DB.query(
         'SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?',
-        { shopId }
+        shopId
     )
     local shopInfo = shopResult and shopResult[1] or nil
 
@@ -92,7 +92,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:PurchaseWeapon", function(params,
         _U("shop_bought_weapon") .. params.quantity .. "x " .. weaponDetails.label .. _U(paid.value.currency == "gold" and "forgold" or "formoney") .. params.total,
         "success")
 
-    local shopResult = MySQL.query.await('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', { shopId })
+    local shopResult = DB.query('SELECT webhook_link, shop_name FROM bcc_shops WHERE shop_id = ?', shopId)
     local shopInfo = shopResult and shopResult[1] or {}
     local webhook = (shopInfo.webhook_link and shopInfo.webhook_link ~= "none") and shopInfo.webhook_link or
     Config.Webhook
@@ -153,9 +153,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params,
     end
 
     -- Optional: Validate if category exists
-    local catCheck = MySQL.scalar.await(
+    local catCheck = DB.value(
         'SELECT 1 FROM bcc_shop_categories WHERE id = ?',
-        { categoryId }
+        categoryId
     )
 
     if not catCheck then
@@ -164,9 +164,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params,
         return cb(false)
     end
 
-    local shopResult = MySQL.query.await(
+    local shopResult = DB.query(
         'SELECT shop_id FROM bcc_shops WHERE shop_name = ?',
-        { shopName }
+        shopName
     )
     if not shopResult or #shopResult == 0 then
         devPrint("[ERROR] Shop not found: " .. tostring(shopName))
@@ -175,17 +175,17 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params,
 
     local shop_id = shopResult[1].shop_id
 
-    local existingItem = MySQL.query.await(
+    local existingItem = DB.query(
         'SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?',
-        { shop_id, itemName }
+        shop_id, itemName
     )
 
     if existingItem and #existingItem > 0 then
         local item_id = existingItem[1].item_id
 
-        local rows = MySQL.update.await(
+        local rows = DB.exec(
             'UPDATE bcc_shop_items SET buy_quantity = buy_quantity + ?, sell_quantity = sell_quantity + ? WHERE item_id = ?',
-            { quantity, quantity, item_id }
+            quantity, quantity, item_id
         )
 
         if rows > 0 then
@@ -196,14 +196,14 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddItemNPCShop", function(params,
             return cb(false)
         end
     else
-        local insertId = MySQL.insert.await([[
+        local insertId = DB.insert([[
             INSERT INTO bcc_shop_items
                 (shop_id, item_label, item_name, currency_type, buy_price, sell_price, category_id, level_required, is_weapon, buy_quantity, sell_quantity)
             VALUES
                 (?, ?, ?, 'cash', ?, ?, ?, ?, 0, ?, ?)
-        ]], {
+        ]],
             shop_id, itemLabel, itemName, buyPrice, sellPrice, categoryId, levelRequired, quantity, quantity
-        })
+        )
 
         if insertId then
             local catLog = categoryId or "NULL"
@@ -239,8 +239,8 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddBuyItem", function(params, cb,
         return cb(false)
     end
 
-    local shopResult = MySQL.query.await(
-        'SELECT shop_id, webhook_link FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL', { shopName })
+    local shopResult = DB.query(
+        'SELECT shop_id, webhook_link FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL', shopName)
     if not shopResult or not shopResult[1] then
         NotifyClient(source, "Player shop not found", "warning")
         return cb(false)
@@ -268,17 +268,16 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddBuyItem", function(params, cb,
 
             isWeapon = playerItem.is_weapon or 0
 
-            local existingItem = MySQL.query.await(
-                'SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?', {
+            local existingItem = DB.query(
+                'SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?',
                     shopId, itemName
-                })
+                )
 
             if existingItem and existingItem[1] then
-                local rowsChanged = MySQL.update.await(
+                local rowsChanged = DB.exec(
                     'UPDATE bcc_shop_items SET buy_quantity = buy_quantity + ?, buy_price = ?, category_id = ?, level_required = ? WHERE item_id = ?',
-                    {
                         quantity, buyPrice, categoryId, levelRequired, existingItem[1].item_id
-                    })
+                    )
 
                 if rowsChanged and rowsChanged > 0 then
                     ShopsInventory:subItem(source, itemName, quantity, {}, function(success)
@@ -321,14 +320,14 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddBuyItem", function(params, cb,
                     cb(false)
                 end
             else
-                local insertSuccess = MySQL.insert.await([[
+                local insertSuccess = DB.insert([[
                     INSERT INTO bcc_shop_items
                     (shop_id, item_label, item_name, buy_price, sell_price, currency_type, category_id, level_required, is_weapon, buy_quantity, sell_quantity)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ]], {
+                ]],
                     shopId, itemLabel, itemName, buyPrice, sellPrice, currencyType, categoryId, levelRequired, isWeapon,
                     quantity, 0
-                })
+                )
 
                 if insertSuccess then
                     ShopsInventory:subItem(source, itemName, quantity, {}, function(success)
@@ -362,8 +361,8 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddBuyItem", function(params, cb,
 
                             cb(true)
                         else
-                            MySQL.update.await('DELETE FROM bcc_shop_items WHERE shop_id = ? AND item_name = ? LIMIT 1',
-                                { shopId, itemName })
+                            DB.exec('DELETE FROM bcc_shop_items WHERE shop_id = ? AND item_name = ? LIMIT 1',
+                                shopId, itemName)
                             NotifyClient(source, "Failed to remove item from inventory", "error")
                             cb(false)
                         end
@@ -407,7 +406,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddWeaponItem", function(params, 
         return
     end
 
-    local shopResult = MySQL.query.await('SELECT shop_id, webhook_link, shop_name FROM bcc_shops WHERE shop_name = ?', { shopName })
+    local shopResult = DB.query('SELECT shop_id, webhook_link, shop_name FROM bcc_shops WHERE shop_name = ?', shopName)
     if not shopResult or not shopResult[1] then
         devPrint("Shop not found: " .. tostring(shopName))
         cb(false)
@@ -419,31 +418,31 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddWeaponItem", function(params, 
     local shopDisplayName = shopResult[1].shop_name or "Unknown"
 
     -- Check if weapon already exists
-    local existing = MySQL.query.await('SELECT weapon_id FROM bcc_shop_weapon_items WHERE shop_id = ? AND weapon_name = ?', {
+    local existing = DB.query('SELECT weapon_id FROM bcc_shop_weapon_items WHERE shop_id = ? AND weapon_name = ?',
         shopId, weaponName
-    })
+    )
 
     local dbOperationSuccess = false
 
     if existing and existing[1] then
         -- Update existing quantity
-        local rows = MySQL.update.await([[
+        local rows = DB.exec([[
             UPDATE bcc_shop_weapon_items
             SET buy_quantity = buy_quantity + ?, buy_price = ?, sell_price = ?, category_id = ?, level_required = ?, custom_desc = ?, weapon_info = ?
             WHERE shop_id = ? AND weapon_name = ?
-        ]], {
+        ]],
             quantity, buyPrice, sellPrice, categoryId, levelRequired, customDesc, weaponInfo, shopId, weaponName
-        })
+        )
         dbOperationSuccess = rows and rows > 0
     else
         -- Insert new weapon row
-        local insertId = MySQL.insert.await([[
+        local insertId = DB.insert([[
             INSERT INTO bcc_shop_weapon_items
             (shop_id, weapon_name, weapon_label, buy_price, sell_price, category_id, currency_type, level_required, custom_desc, weapon_info, buy_quantity)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ]], {
+        ]],
             shopId, weaponName, weaponLabel, buyPrice, sellPrice, categoryId, currencyType, levelRequired, customDesc, weaponInfo, quantity
-        })
+        )
         dbOperationSuccess = insertId and insertId > 0
     end
 
@@ -514,9 +513,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddSellItem", function(params, cb
         return cb(false)
     end
 
-    local shopResult = MySQL.query.await(
+    local shopResult = DB.query(
         'SELECT shop_id, webhook_link FROM bcc_shops WHERE shop_name = ? AND owner_id IS NOT NULL',
-        { shopName })
+        shopName)
 
     if not shopResult or not shopResult[1] then
         NotifyClient(source, "Player shop not found", "warning")
@@ -543,19 +542,19 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddSellItem", function(params, cb
 
             isWeapon = playerItem.is_weapon or 0
 
-            local existingItem = MySQL.query.await(
-                'SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?', {
+            local existingItem = DB.query(
+                'SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?',
                     shopId, itemName
-                })
+                )
 
             if existingItem and existingItem[1] then
-                local rowsChanged = MySQL.update.await([[
+                local rowsChanged = DB.exec([[
                     UPDATE bcc_shop_items
                     SET sell_quantity = sell_quantity + ?, sell_price = ?, category_id = ?, level_required = ?
                     WHERE item_id = ?
-                ]], {
+                ]],
                     quantity, sellPrice, categoryId, levelRequired, existingItem[1].item_id
-                })
+                )
 
                 if rowsChanged and rowsChanged > 0 then
                     NotifyClient(source, "Item updated in store", "success")
@@ -590,14 +589,14 @@ exports['feather-core']:RegisterRPC("bcc-shops:AddSellItem", function(params, cb
                     cb(false)
                 end
             else
-                local insertSuccess = MySQL.insert.await([[
+                local insertSuccess = DB.insert([[
                     INSERT INTO bcc_shop_items
                     (shop_id, item_label, item_name, buy_price, sell_price, currency_type, category_id, level_required, is_weapon, buy_quantity, sell_quantity)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ]], {
+                ]],
                     shopId, itemLabel, itemName, buyPrice, sellPrice, currencyType, categoryId, levelRequired, isWeapon, 0,
                     quantity
-                })
+                )
 
                 if insertSuccess then
                     NotifyClient(source, "Item added to shop", "success")
@@ -657,39 +656,37 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditItemNPCShop", function(params
         return
     end
 
-    MySQL.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            devPrint("Shop not found: " .. tostring(shopName))
-            cb(false)
-            return
-        end
+    local shopResults = DB.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", shopName)
+    if not shopResults or #shopResults == 0 then
+        devPrint("Shop not found: " .. tostring(shopName))
+        cb(false)
+        return
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        MySQL.update([[
-            UPDATE bcc_shop_items
-            SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
-                level_required = ?, buy_quantity = ?, sell_quantity = ?
-            WHERE shop_id = ? AND item_name = ?
-        ]], {
-            itemLabel,
-            buyPrice,
-            sellPrice,
-            category,
-            levelRequired,
-            buyQuantity,
-            sellQuantity,
-            shopId,
-            itemName
-        }, function(rowsChanged)
-            if rowsChanged and rowsChanged > 0 then
-                cb(true)
-            else
-                devPrint("No rows updated for item: " .. tostring(itemName))
-                cb(false)
-            end
-        end)
-    end)
+    local rowsChanged = DB.exec([[
+        UPDATE bcc_shop_items
+        SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
+            level_required = ?, buy_quantity = ?, sell_quantity = ?
+        WHERE shop_id = ? AND item_name = ?
+    ]],
+        itemLabel,
+        buyPrice,
+        sellPrice,
+        category,
+        levelRequired,
+        buyQuantity,
+        sellQuantity,
+        shopId,
+        itemName
+    )
+    if rowsChanged and rowsChanged > 0 then
+        cb(true)
+    else
+        devPrint("No rows updated for item: " .. tostring(itemName))
+        cb(false)
+    end
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:EditItemNPCWeapon", function(params, cb, src)
@@ -710,45 +707,43 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditItemNPCWeapon", function(para
         return
     end
 
-    MySQL.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            devPrint("Shop not found: " .. tostring(shopName))
-            cb(false)
-            return
-        end
+    local shopResults = DB.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', shopName)
+    if not shopResults or #shopResults == 0 then
+        devPrint("Shop not found: " .. tostring(shopName))
+        cb(false)
+        return
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        MySQL.update([[
-            UPDATE bcc_shop_weapon_items
-            SET
-                weapon_label   = ?,
-                buy_price      = ?,
-                sell_price     = ?,
-                category       = ?,
-                level_required = ?,
-                buy_quantity   = COALESCE(?, buy_quantity),
-                sell_quantity  = COALESCE(?, sell_quantity)
-            WHERE shop_id = ? AND weapon_name = ?
-        ]], {
-            weaponLabel,
-            buyPrice,
-            sellPrice,
-            category,
-            levelRequired,
-            buyQty,
-            sellQty,
-            shopId,
-            weaponName
-        }, function(rowsChanged)
-            if rowsChanged and rowsChanged > 0 then
-                cb(true)
-            else
-                devPrint("Failed to update weapon item.")
-                cb(false)
-            end
-        end)
-    end)
+    local rowsChanged = DB.exec([[
+        UPDATE bcc_shop_weapon_items
+        SET
+            weapon_label   = ?,
+            buy_price      = ?,
+            sell_price     = ?,
+            category       = ?,
+            level_required = ?,
+            buy_quantity   = COALESCE(?, buy_quantity),
+            sell_quantity  = COALESCE(?, sell_quantity)
+        WHERE shop_id = ? AND weapon_name = ?
+    ]],
+        weaponLabel,
+        buyPrice,
+        sellPrice,
+        category,
+        levelRequired,
+        buyQty,
+        sellQty,
+        shopId,
+        weaponName
+    )
+    if rowsChanged and rowsChanged > 0 then
+        cb(true)
+    else
+        devPrint("Failed to update weapon item.")
+        cb(false)
+    end
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:EditItemPlayerShop", function(params, cb, src)
@@ -768,49 +763,46 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditItemPlayerShop", function(par
         return
     end
 
-    MySQL.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            devPrint("[ERROR] Shop not found.")
-            cb(false)
-            return
-        end
+    local shopResults = DB.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", shopName)
+    if not shopResults or #shopResults == 0 then
+        devPrint("[ERROR] Shop not found.")
+        cb(false)
+        return
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        -- Ensure item exists; only update (no insert, no buy_quantity changes)
-        MySQL.query("SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?", {
-            shopId, itemName
-        }, function(itemResults)
-            if not itemResults or not itemResults[1] then
-                cb(false, "Item not found in this shop.")
-                return
-            end
+    -- Ensure item exists; only update (no insert, no buy_quantity changes)
+    local itemResults = DB.query("SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?",
+        shopId, itemName
+    )
+    if not itemResults or not itemResults[1] then
+        cb(false, "Item not found in this shop.")
+        return
+    end
 
-            local itemId = itemResults[1].item_id
+    local itemId = itemResults[1].item_id
 
-            MySQL.update([[
-                UPDATE bcc_shop_items
-                SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
-                    level_required = ?, sell_quantity = ?
-                WHERE item_id = ?
-            ]], {
-                itemLabel,
-                buyPrice,
-                sellPrice,
-                category,
-                levelRequired,
-                sellQuantity,
-                itemId
-            }, function(rowsChanged)
-                if rowsChanged and rowsChanged > 0 then
-                    cb(true)
-                else
-                    devPrint("[ERROR] Item not updated.")
-                    cb(false)
-                end
-            end)
-        end)
-    end)
+    local rowsChanged = DB.exec([[
+        UPDATE bcc_shop_items
+        SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
+            level_required = ?, sell_quantity = ?
+        WHERE item_id = ?
+    ]],
+        itemLabel,
+        buyPrice,
+        sellPrice,
+        category,
+        levelRequired,
+        sellQuantity,
+        itemId
+    )
+    if rowsChanged and rowsChanged > 0 then
+        cb(true)
+    else
+        devPrint("[ERROR] Item not updated.")
+        cb(false)
+    end
 end)
 
 -- Edit ITEM in a player shop (no buy_quantity updates)
@@ -831,49 +823,46 @@ exports['feather-core']:RegisterRPC("bcc-shops:EditItemPlayerShop", function(par
         return
     end
 
-    MySQL.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", { shopName }, function(shopResults)
-        if not shopResults or #shopResults == 0 then
-            devPrint("[ERROR] Shop not found.")
-            cb(false)
-            return
-        end
+    local shopResults = DB.query("SELECT shop_id FROM bcc_shops WHERE shop_name = ?", shopName)
+    if not shopResults or #shopResults == 0 then
+        devPrint("[ERROR] Shop not found.")
+        cb(false)
+        return
+    end
 
-        local shopId = shopResults[1].shop_id
+    local shopId = shopResults[1].shop_id
 
-        -- Ensure item exists; only update (no insert, no buy_quantity changes)
-        MySQL.query("SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?", {
-            shopId, itemName
-        }, function(itemResults)
-            if not itemResults or not itemResults[1] then
-                cb(false, "Item not found in this shop.")
-                return
-            end
+    -- Ensure item exists; only update (no insert, no buy_quantity changes)
+    local itemResults = DB.query("SELECT item_id FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?",
+        shopId, itemName
+    )
+    if not itemResults or not itemResults[1] then
+        cb(false, "Item not found in this shop.")
+        return
+    end
 
-            local itemId = itemResults[1].item_id
+    local itemId = itemResults[1].item_id
 
-            MySQL.update([[
-                UPDATE bcc_shop_items
-                SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
-                    level_required = ?, sell_quantity = ?
-                WHERE item_id = ?
-            ]], {
-                itemLabel,
-                buyPrice,
-                sellPrice,
-                category,
-                levelRequired,
-                sellQuantity,
-                itemId
-            }, function(rowsChanged)
-                if rowsChanged and rowsChanged > 0 then
-                    cb(true)
-                else
-                    devPrint("[ERROR] Item not updated.")
-                    cb(false)
-                end
-            end)
-        end)
-    end)
+    local rowsChanged = DB.exec([[
+        UPDATE bcc_shop_items
+        SET item_label = ?, buy_price = ?, sell_price = ?, category_id = ?,
+            level_required = ?, sell_quantity = ?
+        WHERE item_id = ?
+    ]],
+        itemLabel,
+        buyPrice,
+        sellPrice,
+        category,
+        levelRequired,
+        sellQuantity,
+        itemId
+    )
+    if rowsChanged and rowsChanged > 0 then
+        cb(true)
+    else
+        devPrint("[ERROR] Item not updated.")
+        cb(false)
+    end
 end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:RemoveShopItem", function(params, cb, source)
@@ -894,7 +883,7 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveShopItem", function(params,
         return cb(nil)
     end
 
-    local shopQuery = MySQL.query.await('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', { shopName })
+    local shopQuery = DB.query('SELECT shop_id FROM bcc_shops WHERE shop_name = ?', shopName)
     if not shopQuery or #shopQuery == 0 then
         devPrint("[RemoveShopItem] Shop not found: " .. shopName)
         NotifyClient(source, "Shop not found.", "error")
@@ -905,9 +894,9 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveShopItem", function(params,
     local quantityColumn = isBuy and 'buy_quantity' or 'sell_quantity'
     devPrint("[RemoveShopItem] Found shop_id=" .. shop_id .. ", using column=" .. quantityColumn)
 
-    local quantityQuery = MySQL.query.await(
+    local quantityQuery = DB.query(
         'SELECT ' .. quantityColumn .. ' FROM bcc_shop_items WHERE shop_id = ? AND item_name = ?',
-        { shop_id, itemName }
+        shop_id, itemName
     )
 
     if not quantityQuery or #quantityQuery == 0 then
@@ -937,10 +926,10 @@ exports['feather-core']:RegisterRPC("bcc-shops:RemoveShopItem", function(params,
     end
 
     -- Now proceed with the update
-    local updateResult = MySQL.update.await(
+    local updateResult = DB.exec(
         'UPDATE bcc_shop_items SET ' ..
         quantityColumn .. ' = ' .. quantityColumn .. ' - ? WHERE shop_id = ? AND item_name = ?',
-        { quantity, shop_id, itemName }
+        quantity, shop_id, itemName
     )
 
     if updateResult and updateResult > 0 then
@@ -960,7 +949,7 @@ end)
 
 exports['feather-core']:RegisterRPC("bcc-shops:CleanupEmptyItems", function(_, cb, source)
     local _U = ShopTranslator(source)
-    local deleted = MySQL.update.await(
+    local deleted = DB.exec(
         [[DELETE FROM bcc_shop_items
           WHERE buy_quantity = 0 AND sell_quantity = 0
             AND NOT EXISTS (SELECT 1 FROM bcc_shop_payments p
@@ -983,7 +972,7 @@ CreateThread(function()
     while true do
         Wait(120000) -- 2 min
         
-        local deleted = MySQL.update.await(
+        local deleted = DB.exec(
             [[DELETE FROM bcc_shop_items
               WHERE buy_quantity = 0 AND sell_quantity = 0
             AND NOT EXISTS (SELECT 1 FROM bcc_shop_payments p
